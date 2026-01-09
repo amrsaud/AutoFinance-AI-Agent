@@ -145,19 +145,6 @@ tasks:
       - echo "🔨 Deploying the infrastructure.."
       - "{{.UV_CMD}} run pulumi up {{.CLI_ARGS}}"
 
-  build:
-    silent: true
-    desc: "🏗️ Build the infrastructure (no agent resources)"
-    env:
-      AGENT_DEPLOY: 0
-    deps:
-      - auth-check
-    cmds:
-      - task: pulumi-datarobot-plugin-check
-      - task: select-env-stack
-      - echo "Deploying the infrastructure with BUILD mode.."
-      - "AGENT_DEPLOY=0 {{.UV_CMD}} run pulumi up {{.CLI_ARGS}}"
-
   info:
     silent: true
     desc: "ℹ️ Show Pulumi stack info"

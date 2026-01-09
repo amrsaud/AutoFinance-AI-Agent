@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased Changes
 
+## 11.4.2
+- CHECK OUT https://github.com/datarobot-community/datarobot-agent-application FOR THE LATEST UPDATES!
+- Add a deprecation notice to the repository
+
+## 11.4.1
+- CHECK OUT https://github.com/datarobot-community/datarobot-agent-application FOR THE LATEST UPDATES!
+- Migrate repository to use DR CLI.
+- Authentication, setup, env creation and more are now handled via the DR CLI setups.
+- Repo is being moved into maintenance release status. Updates will only be made if critical fixes are required going forward. Please see the datarobot-agent-application for a more complete solution that includes a fastapi server, full MCP integration and dynamic agent creation.
+
 ## 11.4.0
 - CHECK OUT https://github.com/datarobot-community/datarobot-agent-application FOR THE LATEST UPDATES!
 - Upgrade af-component-agent to latest versions

@@ -2,14 +2,13 @@
 root:
   - env: INFRA_ENABLE_LLM
     type: string
-    optional: true
     help: "Choose which type of LLM integration to enable."
     options:
+      - name: "LLM Gateway"
+        value: "gateway_direct.py"
       - name: "External LLM"
         value: "blueprint_with_external_llm.py"
         requires: external_llm
-      - name: "LLM Gateway"
-        value: "gateway_direct.py"
       - name: "LLM Gateway with External Model"
         value: "blueprint_with_llm_gateway.py"
       - name: "DataRobot Deployed LLM"

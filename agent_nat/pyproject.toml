@@ -5,7 +5,7 @@ description = "Implementation of agent_nat"
 readme = "README.md"
 requires-python = ">=3.11, <3.13"
 dependencies = [
-    "datarobot-genai[nat]>=0.2.6,<0.3.0",
+    "datarobot-genai[nat]>=0.2.11,<0.3.0",
     "datarobot-moderations>=11.2.4,<11.3.0",
     "datarobot-drum>=1.17.5,<1.18.0",
     "datarobot-mlops>=11.1.0",

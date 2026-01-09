@@ -24,6 +24,9 @@
   </a>
 </p>
 
+> [!WARNING]
+> **DEPRECATED:** This repository is deprecated and no longer maintained or updated. Refer to the new [DataRobot Agent Application template](https://github.com/datarobot-community/datarobot-agent-application) for all future agentic workflows.
+
 This repository provides ready-to-use templates for building and deploying agentic workflows with multi-agent frameworks.
 Agentic templates streamline the process of setting up new workflows with minimal configuration requirements.
 They support local development and testing, as well as deployment to production environments within DataRobot.
@@ -72,13 +75,17 @@ For detailed installation steps, see [Installation instructions](https://docs.da
 
 | Tool         | Version    | Description                     | Installation guide            |
 |--------------|------------|---------------------------------|-------------------------------|
-| **git**      | >= 2.30.0  | A version control system.       | [git installation guide](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) |
-| **uv**       | >= 0.6.10  | A Python package manager.       | [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/)     |
-| **Pulumi**   | >= 3.163.0 | An Infrastructure as Code tool. | [Pulumi installation guide](https://www.pulumi.com/docs/iac/download-install/)        |
-| **Taskfile** | >= 3.43.3  | A task runner.                  | [Taskfile installation guide](https://taskfile.dev/docs/installation)                 |
+| **dr-cli**   | >= 0.2.22  | The DataRobot CLI.              | [dr-cli installation guide](https://github.com/datarobot-oss/cli?tab=readme-ov-file#installation) |
+| **git**      | >= 2.30.0  | A version control system.       | [git installation guide](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)      |
+| **uv**       | >= 0.9.0  | A Python package manager.        | [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/)       |
+| **Pulumi**   | >= 3.163.0 | An Infrastructure as Code tool. | [Pulumi installation guide](https://www.pulumi.com/docs/iac/download-install/)                   |
+| **Taskfile** | >= 3.43.3  | A task runner.                  | [Taskfile installation guide](https://taskfile.dev/docs/installation)                        |
 
 > [!IMPORTANT]
 > You will also need a compatible C++ compiler and build tools installed on your system to compile some Python packages.
+
+> [!TIP]
+> Make sure to install the tools **system-wide** rather than in a virtual environment so they are available in your terminal sessions.
 
 # Create and deploy your agent
 
@@ -214,8 +221,9 @@ Ensure your `.env` file has the correct API token and endpoint, as detailed in [
 Run the following command to test your agent:
 
 ```bash
-# You can run task agent:dev in a separate window or use `START_DEV=1` to run the local agent inline
-task agent:cli START_DEV=1 -- execute --user_prompt 'Tell me about Generative AI'
+# Replace <agent> with the task command of your selected agent. Type `task` for help.
+# You can run task <agent>:dev in a separate window or use `START_DEV=1` to run the local agent inline
+task <agent>:cli START_DEV=1 -- execute --user_prompt 'Tell me about Generative AI'
 ```
 
 Depending on the framework you selected, the test output will vary.
@@ -294,7 +302,8 @@ Use the CLI to test your deployed agent.
 In the following command, replace <YOUR_DEPLOYMENT_ID> with your actual deployment ID from the previous step:
 
 ```bash
-task agent:cli -- execute-deployment --user_prompt 'Tell me about Generative AI' --deployment_id <YOUR_DEPLOYMENT_ID>
+# Replace <agent> with the task command of your selected agent. Type `task` for help.
+task <agent>:cli -- execute-deployment --user_prompt 'Tell me about Generative AI' --deployment_id <YOUR_DEPLOYMENT_ID>
 ```
 
 > [!NOTE]

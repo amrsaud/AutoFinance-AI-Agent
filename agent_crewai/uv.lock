@@ -83,7 +83,7 @@ dev = [
 requires-dist = [
     { name = "chainlit", marker = "extra == 'chainlit'", specifier = ">=2.9.0" },
     { name = "datarobot-drum", specifier = ">=1.17.5,<1.18.0" },
-    { name = "datarobot-genai", extras = ["crewai"], specifier = ">=0.2.6,<0.3.0" },
+    { name = "datarobot-genai", extras = ["crewai"], specifier = ">=0.2.11,<0.3.0" },
     { name = "datarobot-mlops", specifier = ">=11.1.0" },
     { name = "datarobot-moderations", specifier = ">=11.2.4,<11.3.0" },
     { name = "ecs-logging", marker = "extra == 'agentic-playground'", specifier = ">=2.2.0" },
@@ -440,6 +440,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/6b/5c/685e6633917e101e5dcb62b9dd76946cbb57c26e133bae9e0cd36033c0a9/attrs-25.4.0.tar.gz", hash = "sha256:16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11", size = 934251, upload-time = "2025-10-06T13:54:44.725Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/2a/7cc015f5b9f5db42b7d48157e23356022889fc354a2813c15934b7cb5c0e/attrs-25.4.0-py3-none-any.whl", hash = "sha256:adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373", size = 67615, upload-time = "2025-10-06T13:54:43.17Z" },
+]
+
+[[package]]
+name = "azure-ai-inference"
+version = "1.0.0b9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/6a/ed85592e5c64e08c291992f58b1a94dab6869f28fb0f40fd753dced73ba6/azure_ai_inference-1.0.0b9.tar.gz", hash = "sha256:1feb496bd84b01ee2691befc04358fa25d7c344d8288e99364438859ad7cd5a4", size = 182408, upload-time = "2025-02-15T00:37:28.464Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/0f/27520da74769db6e58327d96c98e7b9a07ce686dff582c9a5ec60b03f9dd/azure_ai_inference-1.0.0b9-py3-none-any.whl", hash = "sha256:49823732e674092dad83bb8b0d1b65aa73111fab924d61349eb2a8cdc0493990", size = 124885, upload-time = "2025-02-15T00:37:29.964Z" },
 ]
 
 [[package]]
@@ -1182,7 +1196,7 @@ wheels = [
 
 [[package]]
 name = "datarobot-genai"
-version = "0.2.9"
+version = "0.2.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ag-ui-protocol" },
@@ -1202,13 +1216,15 @@ dependencies = [
     { name = "ragas" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/85/1861018b769473966c41bbe57433bd4fae77e2ee44165310ab790dd590bd/datarobot_genai-0.2.9.tar.gz", hash = "sha256:ca80bac1654fda4ca62fbe35a63848358b1bb18e6c11855739ea688784cd3fee", size = 114465, upload-time = "2025-12-16T13:43:01.126Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/07/3d2e13560e0528a7ceedbc971630eba13f1ab98373b5834b1dd1771f4db8/datarobot_genai-0.2.13.tar.gz", hash = "sha256:e9534fa251215b19ab54ca5a8c33792f529e3b4eb3ebcd39e1fb68fb18b15221", size = 117240, upload-time = "2025-12-29T14:10:23.128Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/e5/631c93fd4501cfc4db2ef84dccac65f0bd512e8a58bcb901df367e09b526/datarobot_genai-0.2.9-py3-none-any.whl", hash = "sha256:9beba6009f0a5522f5f63b823e5f40c6709f53f3564de1c1a8b9fc56ad58df42", size = 189499, upload-time = "2025-12-16T13:42:59.657Z" },
+    { url = "https://files.pythonhosted.org/packages/04/e5/440e2fbc76c90319633fdc1649d748d5cf32714f8905c7ef0708818c8517/datarobot_genai-0.2.13-py3-none-any.whl", hash = "sha256:48cf6b6fee2086259f33fede3163321054a79117927f0cefda1f865da717c2e8", size = 193747, upload-time = "2025-12-29T14:10:21.97Z" },
 ]
 
 [package.optional-dependencies]
 crewai = [
+    { name = "anthropic" },
+    { name = "azure-ai-inference" },
     { name = "crewai" },
     { name = "crewai-tools", extra = ["mcp"] },
     { name = "opentelemetry-instrumentation-crewai" },

@@ -36,7 +36,23 @@ tasks:
   start:
     desc: "‼️ Quickstart for DataRobot Agent Templates ‼️"
     cmds:
+      - dr self update
       - uv run quickstart.py
+      - rm quickstart.py
+      - dr task compose
+      - dr dotenv setup --if-needed
+      - dr dotenv update
+      - task install
+      - |
+        echo 'DataRobot agent templates provide you with several CLI tools to help you manage your agent development and deployment.
+
+        For more information please go to:
+          https://docs.datarobot.com/en/docs/agentic-ai/agentic-develop/index.html
+
+        You can also run the following command for a list of actions:
+          > task
+        You can refresh your environment at any time by running:
+          > task install'
   install:
     desc: "Install dependencies for all agent components and infra"
     cmds:
