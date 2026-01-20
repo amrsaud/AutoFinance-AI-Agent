@@ -42,6 +42,21 @@ class Config(DataRobotAppFrameworkBaseSettings):
         default="http://localhost:8842", validation_alias="AGENT_LANGGRAPH_ENDPOINT"
     )
 
+    # AutoFinance Configuration
+    tavily_api_key: str | None = Field(default=None, validation_alias="TAVILY_API_KEY")
+    supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
+    supabase_key: str | None = Field(default=None, validation_alias="SUPABASE_KEY")
+    vectordb_deployment_id: str | None = Field(
+        default=None, validation_alias="VECTORDB_DEPLOYMENT_ID"
+    )
+
+    # Loan defaults
+    default_tenure_months: int = 60
+    max_vehicle_age: int = 10
+    min_monthly_income: float = 5000.0
+    default_interest_rate: float = 18.0
+    max_dbr: float = 0.40
+
     @property
     def local_dev_port(self) -> int:
         parsed_url = urlparse(self.agent_endpoint)

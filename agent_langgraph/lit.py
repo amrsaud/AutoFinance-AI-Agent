@@ -1,56 +1,160 @@
 # Copyright 2025 DataRobot, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# mypy: disable-error-code="ignore-without-code"
+# Licensed under the Apache License, Version 2.0
+"""
+Chainlit integration for AutoFinance AI Agent.
+"""
 
 import chainlit as cl
-from openai import AsyncOpenAI
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain.schema.runnable.config import RunnableConfig
 
+from agentic_workflow.agent import AutoFinanceAgent
 from agentic_workflow.config import Config
 
 config = Config()
 
-client = AsyncOpenAI(base_url=config.agent_endpoint, api_key="empty")
+
+def get_initial_state() -> dict:
+    """Create initial state for the agent."""
+    return {
+        "messages": [],
+        "current_phase": "onboarding",
+        "search_params": None,
+        "search_results": None,
+        "selected_vehicle": None,
+        "monthly_income": None,
+        "employment_type": None,
+        "applicable_policy": None,
+        "financial_quote": None,
+        "customer_info": None,
+        "request_id": None,
+    }
 
 
-@cl.on_chat_start  # type: ignore
-def start_chat() -> None:
-    cl.user_session.set(
-        "message_history",
-        [],
-    )
+@cl.on_chat_start
+async def start_chat() -> None:
+    """Initialize chat session with state."""
+    cl.user_session.set("state", get_initial_state())
 
-
-@cl.on_message  # type: ignore
-async def on_message(message: cl.Message) -> None:
-    message_history = cl.user_session.get("message_history")
-    message_history.append({"role": "user", "content": message.content})
-
-    msg = cl.Message(content="")
-
-    stream = await client.chat.completions.create(
-        messages=message_history,
+    # Initialize agent once
+    agent = AutoFinanceAgent(
+        messages=[],
+        model=config.llm_default_model,
         stream=True,
-        model="datarobot/azure/gpt-5-mini-2025-08-07",
     )
-    async for part in stream:
-        if token := part.choices[0].delta.content or "":
-            await msg.stream_token(token)
+    # Compile graph once
+    graph = agent.workflow.compile()
 
-    # handle the case where the response is empty
-    if not msg.content:
-        msg.content = "No response received from the agent. Please check if agent supports streaming."
-        await msg.send()
+    cl.user_session.set("graph", graph)
 
-    message_history.append({"role": "assistant", "content": msg.content})
+    await cl.Message(
+        content="""🚗 **Welcome to AutoFinance AI!**
+
+I help you find cars in Egypt and calculate loan options instantly.
+
+**What would you like to do?**
+1️⃣ **Start New Request** - "Find me a Toyota Corolla"
+2️⃣ **Check Status** - Provide your Request ID (AF-XXXXXX-XXXX)"""
+    ).send()
+
+
+@cl.on_message
+async def on_message(message: cl.Message) -> None:
+    """Handle messages with LangGraph streaming and Chainlit callbacks."""
+    graph = cl.user_session.get("graph")
+    state = cl.user_session.get("state")
+
+    if not state:
+        state = get_initial_state()
+
+    # Append user message
+    state["messages"].append(HumanMessage(content=message.content))
+
+    # Config with callback handler for UI visualization
+    cb = cl.LangchainCallbackHandler()
+    runnable_config = RunnableConfig(
+        callbacks=[cb], configurable={"thread_id": cl.context.session.id}
+    )
+
+    # Clean final answer container
+    final_answer = cl.Message(content="")
+
+    # Stream the graph execution
+    # We use astream to get events/updates
+    async for output in graph.astream(state, config=runnable_config):
+        # Output is a dict of node_name: state_update
+        for node_name, state_update in output.items():
+            if node_name == "router":
+                # Update our local state with the result from the router
+                for key, value in state_update.items():
+                    if value is not None:
+                        state[key] = value
+
+                # --- UI VISUALIZATION OF STATE CHANGES ---
+
+                # 1. Phase Change
+                if "current_phase" in state_update:
+                    phase = state_update["current_phase"]
+                    async with cl.Step(name="🔄 Phase Transition", type="run") as s:
+                        s.output = f"Switched to: **{phase.upper()}**"
+
+                # 2. Search Parameters (Readable)
+                if "search_params" in state_update and state_update["search_params"]:
+                    p = state_update["search_params"]
+                    # Handle both dict and object
+                    if hasattr(p, "dict"):
+                        p = p.dict()
+                    elif hasattr(p, "model_dump"):
+                        p = p.model_dump()
+
+                    async with cl.Step(name="🔍 Extracted Criteria", type="run") as s:
+                        s.output = f"""**Make:** {p.get("make")}
+**Model:** {p.get("model")}
+**Years:** {p.get("year_from")} - {p.get("year_to")}
+**Price Cap:** {p.get("price_cap", "None")}"""
+
+                # 3. Selected Vehicle (Readable)
+                if (
+                    "selected_vehicle" in state_update
+                    and state_update["selected_vehicle"]
+                ):
+                    v = state_update["selected_vehicle"]
+                    if hasattr(v, "model_dump"):
+                        v = v.model_dump()
+
+                    async with cl.Step(name="✅ Vehicle Selected", type="run") as s:
+                        s.output = f"""**{v.get("year")} {v.get("make")} {v.get("model")}**
+**Price:** {v.get("price"):,.0f} EGP
+**Mileage:** {v.get("mileage")} km
+**Source:** {v.get("source_name")}"""
+
+                # 4. Financial Quote (Readable)
+                if (
+                    "financial_quote" in state_update
+                    and state_update["financial_quote"]
+                ):
+                    q = state_update["financial_quote"]
+                    if hasattr(q, "model_dump"):
+                        q = q.model_dump()
+
+                    async with cl.Step(name="💰 Loan Calculation", type="run") as s:
+                        s.output = f"""**Monthly Installment:** {q.get("monthly_installment"):,.0f} EGP
+**Interest Rate:** {q.get("interest_rate")}%
+**Tenure:** {q.get("tenure_months")} months
+**Total Payment:** {q.get("total_payment"):,.0f} EGP"""
+
+                # -----------------------------------------
+
+                # Check if there are new messages to display
+                if "messages" in state_update:
+                    msgs = state_update["messages"]
+                    for msg in msgs:
+                        # We only want to display AI messages that are new
+                        if isinstance(msg, AIMessage) and msg.content:
+                            await final_answer.stream_token(msg.content)
+
+    # Send the final aggregated message
+    await final_answer.send()
+
+    # Save state back to session
+    cl.user_session.set("state", state)
