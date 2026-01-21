@@ -90,6 +90,10 @@ name = "Assistant"
 
 # default_theme = "dark"
 
+# Force a specific language for all users (e.g., "en-US", "he-IL", "fr-FR")
+# If not set, the browser's language will be used
+# language = "en-US"
+
 # layout = "wide"
 
 # default_sidebar_state = "open"
@@ -150,4 +154,4 @@ default_avatar_file_url = ""
 #     target = "_blank" (default)  # Optional: "_self", "_parent", "_top".
 
 [meta]
-generated_by = "2.8.3"
+generated_by = "2.9.3"

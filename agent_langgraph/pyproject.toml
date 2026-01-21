@@ -17,6 +17,10 @@ dependencies = [
 
     "pdfminer.six>=20251107",  # CVE fix
     "langgraph-checkpoint>=3.0.0", # CVE fix
+    
+    # AutoFinance
+    "tavily-python>=0.5.0",
+    "supabase>=2.10.0",
 ]
 
 [project.optional-dependencies]
