@@ -14,9 +14,11 @@ dependencies = [
     "langchain-litellm>=0.2.3",
     "opentelemetry-api>=1.33.0,<2.0.0",
     "opentelemetry-sdk>=1.33.0,<2.0.0",
-
     "pdfminer.six>=20251107",  # CVE fix
     "langgraph-checkpoint>=3.0.0", # CVE fix
+    "supabase>=2.25.1",
+    "tavily-python>=0.7.19",
+    "chainlit>=2.9.3",
 ]
 
 [project.optional-dependencies]

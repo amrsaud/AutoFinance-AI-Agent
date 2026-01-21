@@ -32,11 +32,19 @@ class Config(DataRobotAppFrameworkBaseSettings):
     Pulumi output variables.
     """
 
+    # LLM Settings
     llm_deployment_id: str | None = None
     llm_default_model: str = "datarobot/azure/gpt-5-mini-2025-08-07"
     use_datarobot_llm_gateway: bool = False
     mcp_deployment_id: str | None = None
     external_mcp_url: str | None = None
+
+    # Tavily API for car search
+    tavily_api_key: str | None = Field(default=None, validation_alias="TAVILY_API_KEY")
+
+    # Supabase for lead storage
+    supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
+    supabase_key: str | None = Field(default=None, validation_alias="SUPABASE_KEY")
 
     agent_endpoint: str = Field(
         default="http://localhost:8842", validation_alias="AGENT_LANGGRAPH_ENDPOINT"
