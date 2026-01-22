@@ -26,8 +26,9 @@ from config import Config
 # ------------------------------------------------------------------------------
 import asyncio
 import os
+import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, AsyncGenerator, Iterator, Union
+from typing import Any, AsyncGenerator, Iterator, Optional, Union
 
 from datarobot_genai.core.chat import (
     CustomModelChatResponse,
@@ -42,20 +43,63 @@ from openai.types.chat.completion_create_params import (
     CompletionCreateParamsStreaming,
 )
 
+# Import checkpointer creation function
+from persistence.supabase_checkpointer import create_supabase_checkpointer
 
-def load_model(code_dir: str) -> tuple[ThreadPoolExecutor, asyncio.AbstractEventLoop]:
-    """The agent is instantiated in this function and returned."""
+
+def load_model(
+    code_dir: str,
+) -> tuple[ThreadPoolExecutor, asyncio.AbstractEventLoop, Any]:
+    """
+    The agent is instantiated in this function and returned.
+
+    Also initializes the PostgreSQL checkpointer for state persistence.
+    This enables multi-turn conversations with memory across requests.
+    """
     thread_pool_executor = ThreadPoolExecutor(1)
     event_loop = asyncio.new_event_loop()
     thread_pool_executor.submit(asyncio.set_event_loop, event_loop).result()
-    return (thread_pool_executor, event_loop)
+
+    # Initialize checkpointer once at startup for reuse across requests
+    checkpointer = create_supabase_checkpointer()
+
+    return (thread_pool_executor, event_loop, checkpointer)
+
+
+def _extract_thread_id(completion_create_params: dict) -> str:
+    """
+    Extract or generate a thread_id for conversation memory.
+
+    Priority:
+    1. Look for thread_id in extra_body
+    2. Look for x-conversation-id in headers
+    3. Generate a new UUID
+    """
+    # Check extra_body for explicit thread_id
+    extra_body = completion_create_params.get("extra_body", {}) or {}
+    if "thread_id" in extra_body:
+        return str(extra_body["thread_id"])
+
+    # Check for conversation ID in DataRobot association
+    if "datarobot_association_id" in completion_create_params:
+        return str(completion_create_params["datarobot_association_id"])
+
+    # Check forwarded headers
+    headers = completion_create_params.get("forwarded_headers", {}) or {}
+    for header_name in ["x-conversation-id", "x-thread-id", "x-session-id"]:
+        if header_name in headers:
+            return str(headers[header_name])
+
+    # Generate a new thread_id if none found
+    # Note: This means each request without a thread_id is a new conversation
+    return str(uuid.uuid4())
 
 
 def chat(
     completion_create_params: CompletionCreateParams
     | CompletionCreateParamsNonStreaming
     | CompletionCreateParamsStreaming,
-    load_model_result: tuple[ThreadPoolExecutor, asyncio.AbstractEventLoop],
+    load_model_result: tuple[ThreadPoolExecutor, asyncio.AbstractEventLoop, Any],
     **kwargs: Any,
 ) -> Union[CustomModelChatResponse, Iterator[CustomModelStreamingResponse]]:
     """When using the chat endpoint, this function is called.
@@ -75,11 +119,12 @@ def chat(
             ],
             extra_body = {
                 "environment_var": True,
+                "thread_id": "unique-conversation-id",  # For memory persistence
             },
             ...
         )
     """
-    thread_pool_executor, event_loop = load_model_result
+    thread_pool_executor, event_loop, checkpointer = load_model_result
 
     # Change working directory to the directory containing this file.
     # Some agent frameworks expect this for expected pathing.
@@ -102,6 +147,13 @@ def chat(
         k: v for k, v in incoming_headers.items() if k.lower() in allowed_headers
     }
     completion_create_params["forwarded_headers"] = forwarded_headers
+
+    # Extract thread_id for conversation memory
+    thread_id = _extract_thread_id(completion_create_params)
+
+    # Pass checkpointer and thread_id config to the agent
+    completion_create_params["checkpointer"] = checkpointer
+    completion_create_params["thread_id"] = thread_id
 
     # Instantiate the agent, all fields from the completion_create_params are passed to the agent
     # allowing environment variables to be passed during execution

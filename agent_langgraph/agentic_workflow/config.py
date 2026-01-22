@@ -38,6 +38,26 @@ class Config(DataRobotAppFrameworkBaseSettings):
     mcp_deployment_id: str | None = None
     external_mcp_url: str | None = None
 
+    # Supabase configuration for state persistence and application storage
+    supabase_url: str | None = Field(None, validation_alias="SUPABASE_URL")
+    supabase_key: str | None = Field(None, validation_alias="SUPABASE_KEY")
+
+    # Direct PostgreSQL connection string for checkpointer
+    # Format: postgres://user:password@host:port/database
+    # For Supabase: postgres://postgres.[project-ref]:[password]@[host]:6543/postgres
+    postgres_uri: str | None = Field(None, validation_alias="POSTGRES_URI")
+
+    # Tavily Search API for marketplace queries
+    tavily_api_key: str | None = Field(None, validation_alias="TAVILY_API_KEY")
+
+    # DataRobot VectorDB for credit policy RAG
+    vectordb_id: str | None = Field(None, validation_alias="VECTORDB_ID")
+
+    # Default loan settings
+    default_loan_tenure_months: int = Field(
+        60, validation_alias="DEFAULT_LOAN_TENURE_MONTHS"
+    )
+
     agent_endpoint: str = Field(
         default="http://localhost:8842", validation_alias="AGENT_LANGGRAPH_ENDPOINT"
     )

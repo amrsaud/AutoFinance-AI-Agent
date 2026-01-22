@@ -17,6 +17,12 @@ dependencies = [
 
     "pdfminer.six>=20251107",  # CVE fix
     "langgraph-checkpoint>=3.0.0", # CVE fix
+    
+    # AutoFinance AI Agent dependencies
+    "tavily-python>=0.5.0",  # Marketplace search
+    "supabase>=2.0.0",  # Application storage
+    "langgraph-checkpoint-postgres>=2.0.0",  # Official Postgres checkpointer
+    "psycopg[binary]>=3.0.0",  # PostgreSQL driver for checkpointer
 ]
 
 [project.optional-dependencies]
