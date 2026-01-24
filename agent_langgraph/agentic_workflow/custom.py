@@ -103,6 +103,13 @@ def chat(
     }
     completion_create_params["forwarded_headers"] = forwarded_headers
 
+    # Pass association_id from kwargs to completion_create_params for thread_id extraction
+    if "association_id" in kwargs:
+        completion_create_params["association_id"] = kwargs["association_id"]
+
+    if "chatId" in kwargs:
+        completion_create_params["chatId"] = kwargs["chatId"]
+
     # Instantiate the agent, all fields from the completion_create_params are passed to the agent
     # allowing environment variables to be passed during execution
     # Note: thread_id is extracted from completion_create_params inside the agent

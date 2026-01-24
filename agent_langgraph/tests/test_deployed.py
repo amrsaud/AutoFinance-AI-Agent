@@ -12,10 +12,7 @@ load_dotenv()
 
 # DataRobot deployment config from environment
 DEPLOYMENT_ID = os.environ.get("AGENT_DEPLOYMENT_ID")
-BASE_URL = (
-    os.environ.get("DATAROBOT_ENDPOINT", "https://app.datarobot.com/api/v2")
-    + "/deployments"
-)
+BASE_URL = "https://app.datarobot.com/api/v2" + "/deployments"
 API_TOKEN = os.environ.get("DATAROBOT_API_TOKEN")
 
 
@@ -33,7 +30,7 @@ async def test_deployed_memory():
     print("Sending Message 1...")
     response1 = await client.chat.completions.create(
         model="datarobot/azure/gpt-5-mini-2025-08-07",
-        messages=[{"role": "user", "content": "My name is DeployedUser. Remember it."}],
+        messages=[{"role": "user", "content": "My name is Amr Saud. Remember it."}],
         extra_body={"datarobot_association_id": thread_id},
     )
     content1 = response1.choices[0].message.content
@@ -50,7 +47,7 @@ async def test_deployed_memory():
     print(f"Response 2: {content2}\n")
 
     # Check if memory worked
-    if "DeployedUser" in content2:
+    if "Amr Saud" in content2:
         print("✅ DEPLOYMENT TEST PASSED: Agent remembered name.")
     else:
         print(
