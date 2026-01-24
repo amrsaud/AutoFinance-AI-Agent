@@ -112,15 +112,20 @@ class MyAgent(LangGraphAgent):
         # Extract thread_id from completion_create_params
         # DataRobot uses 'datarobot_association_id' for conversation tracking
         extra_body = completion_create_params.get("extra_body") or {}
+        metadata = completion_create_params.get("metadata") or {}
+        extra_body_metadata = extra_body.get("metadata") or {}
+
         request_thread_id = (
             extra_body.get("thread_id")
             or extra_body.get("datarobot_association_id")
             or extra_body.get("association_id")
             or extra_body.get("chatId")
+            or extra_body_metadata.get("thread_id")
             or completion_create_params.get("thread_id")
             or completion_create_params.get("datarobot_association_id")
             or completion_create_params.get("association_id")
             or completion_create_params.get("chatId")
+            or metadata.get("thread_id")
             or str(uuid.uuid4())  # Generate new UUID if no thread_id provided
         )
         run_config = {"configurable": {"thread_id": request_thread_id}}
