@@ -42,6 +42,20 @@ from openai.types.chat.completion_create_params import (
     CompletionCreateParamsStreaming,
 )
 
+import logging
+import sys
+from opentelemetry import trace
+
+# Configure logging to ensure it outputs to stdout/stderr
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+logger = logging.getLogger(__name__)
+tracer = trace.get_tracer(__name__)
+
 
 def load_model(code_dir: str) -> tuple[ThreadPoolExecutor, asyncio.AbstractEventLoop]:
     """The agent is instantiated in this function and returned."""
@@ -79,7 +93,23 @@ def chat(
             ...
         )
     """
-    thread_pool_executor, event_loop = load_model_result
+
+    with tracer.start_as_current_span("custom_model_chat") as span:
+        # log all the inputs with all the details
+        logger.info(f"Completion create params: {completion_create_params}")
+        logger.info(f"Load model result: {load_model_result}")
+        logger.info(f"Kwargs: {kwargs}")
+
+        # Add attributes to the span
+        span.set_attribute("completion_create_params", str(completion_create_params))
+        span.set_attribute("kwargs", str(kwargs))
+        if "datarobot_association_id" in completion_create_params:
+            span.set_attribute(
+                "datarobot_association_id",
+                str(completion_create_params.get("datarobot_association_id")),
+            )
+
+        thread_pool_executor, event_loop = load_model_result
 
     # Change working directory to the directory containing this file.
     # Some agent frameworks expect this for expected pathing.
