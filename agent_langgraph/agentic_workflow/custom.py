@@ -103,16 +103,10 @@ def chat(
     }
     completion_create_params["forwarded_headers"] = forwarded_headers
 
-    # Extract thread_id from extra_body for conversation memory persistence
-    # Supports both 'thread_id' and 'datarobot_association_id' for DataRobot playground compatibility
-    extra_body = completion_create_params.get("extra_body") or {}
-    thread_id = extra_body.get("thread_id") or extra_body.get(
-        "datarobot_association_id"
-    )
-
     # Instantiate the agent, all fields from the completion_create_params are passed to the agent
     # allowing environment variables to be passed during execution
-    agent = MyAgent(thread_id=thread_id, **completion_create_params)
+    # Note: thread_id is extracted from completion_create_params inside the agent
+    agent = MyAgent(**completion_create_params)
 
     # Invoke the agent
     result = thread_pool_executor.submit(

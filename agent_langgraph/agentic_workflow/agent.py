@@ -40,29 +40,20 @@ class MyAgent(LangGraphAgent):
 
     def __init__(
         self,
-        thread_id: str | None = None,
         **kwargs: Any,
     ):
-        """Initialize the agent with optional thread_id for conversation tracking.
+        """Initialize the agent.
 
         Args:
-            thread_id: Unique identifier for the conversation thread.
-                       If not provided, a new UUID will be generated.
             **kwargs: Additional arguments passed to LangGraphAgent.
         """
         super().__init__(**kwargs)
-        self.thread_id = thread_id or str(uuid.uuid4())
         # We don't initialize checkpointer here, we limit its scope to the request
 
     @property
     def checkpointer(self) -> None:
         """Deprecated: Checkpointer is managed in _invoke."""
         return None
-
-    @property
-    def langgraph_config(self) -> dict[str, Any]:
-        """Configuration for LangGraph including thread_id for checkpointing."""
-        return {"configurable": {"thread_id": self.thread_id}}
 
     @property
     def prompt_template(self) -> ChatPromptTemplate:
@@ -118,16 +109,19 @@ class MyAgent(LangGraphAgent):
 
         input_command = self.convert_input_message(completion_create_params)
 
-        # Allow thread_id to be passed via 'extra_body' using 'thread_id' or 'datarobot_association_id'
-        # We generally expect these to be in extra_body for OpenAI-compatible requests
+        # Extract thread_id from completion_create_params
+        # DataRobot uses 'datarobot_association_id' for conversation tracking
         extra_body = completion_create_params.get("extra_body") or {}
         request_thread_id = (
             extra_body.get("thread_id")
             or extra_body.get("datarobot_association_id")
+            or extra_body.get("association_id")
+            or extra_body.get("chatId")
+            or completion_create_params.get("thread_id")
             or completion_create_params.get("datarobot_association_id")
             or completion_create_params.get("association_id")
             or completion_create_params.get("chatId")
-            or self.thread_id
+            or str(uuid.uuid4())  # Generate new UUID if no thread_id provided
         )
         run_config = {"configurable": {"thread_id": request_thread_id}}
 
