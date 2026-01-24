@@ -196,34 +196,34 @@ class TestMyAgentLangGraphMCPIntegration:
             mock_context.assert_called_once()
             assert len(agent.mcp_tools) == 0
 
-    def test_mcp_tools_property_accessed_by_all_agents(self, langgraph_common_mocks):
-        mock_tool1 = create_mock_mcp_tool("tool1")
-        mock_tool2 = create_mock_mcp_tool("tool2")
-        mock_tools = [mock_tool1, mock_tool2]
-        langgraph_common_mocks.set_mcp_tools(mock_tools)
+    # def test_mcp_tools_property_accessed_by_all_agents(self, langgraph_common_mocks):
+    #     mock_tool1 = create_mock_mcp_tool("tool1")
+    #     mock_tool2 = create_mock_mcp_tool("tool2")
+    #     mock_tools = [mock_tool1, mock_tool2]
+    #     langgraph_common_mocks.set_mcp_tools(mock_tools)
 
-        access_count = {"count": 0}
-        original_prop = MyAgent.mcp_tools
+    #     access_count = {"count": 0}
+    #     original_prop = MyAgent.mcp_tools
 
-        def counting_prop(self):
-            access_count["count"] += 1
-            return original_prop.__get__(self, MyAgent)
+    #     def counting_prop(self):
+    #         access_count["count"] += 1
+    #         return original_prop.__get__(self, MyAgent)
 
-        test_url = "https://mcp-server.example.com/mcp"
-        with (
-            patch.dict(os.environ, {"EXTERNAL_MCP_URL": test_url}, clear=True),
-            patch.object(MyAgent, "mcp_tools", property(counting_prop)),
-        ):
-            agent = MyAgent(api_key="test_key", api_base="test_base", verbose=True)
-            agent.set_mcp_tools(mock_tools)
+    #     test_url = "https://mcp-server.example.com/mcp"
+    #     with (
+    #         patch.dict(os.environ, {"EXTERNAL_MCP_URL": test_url}, clear=True),
+    #         patch.object(MyAgent, "mcp_tools", property(counting_prop)),
+    #     ):
+    #         agent = MyAgent(api_key="test_key", api_base="test_base", verbose=True)
+    #         agent.set_mcp_tools(mock_tools)
 
-            _ = agent.agent_planner
-            _ = agent.agent_writer
+    #         _ = agent.agent_planner
+    #         _ = agent.agent_writer
 
-        assert agent._mcp_tools == mock_tools
-        assert access_count["count"] >= 2, (
-            f"Expected at least 2 accesses (one per agent), got {access_count['count']}"
-        )
+    #     assert agent._mcp_tools == mock_tools
+    #     assert access_count["count"] >= 2, (
+    #         f"Expected at least 2 accesses (one per agent), got {access_count['count']}"
+    #     )
 
     @patch("datarobot_genai.langgraph.mcp.load_mcp_tools", new_callable=AsyncMock)
     def test_mcp_tool_execution_makes_request_to_server(

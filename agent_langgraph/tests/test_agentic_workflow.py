@@ -87,7 +87,7 @@ class TestCustomModel:
         assert actual == expected
 
         # Verify mocks were called correctly
-        mock_agent.assert_called_once_with(**completion_create_params)
+        mock_agent.assert_called_once_with(thread_id=None, **completion_create_params)
         mock_agent_instance.invoke.assert_called_once_with(
             completion_create_params={
                 "model": "test-model",
@@ -166,7 +166,7 @@ class TestCustomModel:
         assert final_chunk["usage"]["total_tokens"] == 5
 
         # Verify mocks were called correctly
-        mock_agent.assert_called_once_with(**completion_create_params)
+        mock_agent.assert_called_once_with(thread_id=None, **completion_create_params)
         mock_agent_instance.invoke.assert_called_once_with(
             completion_create_params=completion_create_params
         )

@@ -14,6 +14,8 @@
 
 # mypy: disable-error-code="ignore-without-code"
 
+import uuid
+
 import chainlit as cl
 from openai import AsyncOpenAI
 
@@ -26,10 +28,10 @@ client = AsyncOpenAI(base_url=config.agent_endpoint, api_key="empty")
 
 @cl.on_chat_start  # type: ignore
 def start_chat() -> None:
-    cl.user_session.set(
-        "message_history",
-        [],
-    )
+    # Generate a unique thread_id for this session
+    thread_id = str(uuid.uuid4())
+    cl.user_session.set("thread_id", thread_id)
+    cl.user_session.set("message_history", [])
 
 
 @cl.on_message  # type: ignore
@@ -37,12 +39,16 @@ async def on_message(message: cl.Message) -> None:
     message_history = cl.user_session.get("message_history")
     message_history.append({"role": "user", "content": message.content})
 
+    thread_id = cl.user_session.get("thread_id")
+
     msg = cl.Message(content="")
 
+    # The agent manages its own history via thread_id, so we only send the latest user message
     stream = await client.chat.completions.create(
-        messages=message_history,
+        messages=[{"role": "user", "content": message.content}],
         stream=True,
         model="datarobot/azure/gpt-5-mini-2025-08-07",
+        extra_body={"datarobot_association_id": thread_id},
     )
     async for part in stream:
         if token := part.choices[0].delta.content or "":

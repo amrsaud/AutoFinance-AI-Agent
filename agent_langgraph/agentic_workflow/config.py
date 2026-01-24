@@ -38,6 +38,9 @@ class Config(DataRobotAppFrameworkBaseSettings):
     mcp_deployment_id: str | None = None
     external_mcp_url: str | None = None
 
+    # PostgreSQL connection URL for LangGraph checkpointer (memory persistence)
+    postgres_uri: str | None = Field(default=None, validation_alias="POSTGRES_URI")
+
     agent_endpoint: str = Field(
         default="http://localhost:8842", validation_alias="AGENT_LANGGRAPH_ENDPOINT"
     )
