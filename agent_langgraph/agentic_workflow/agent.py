@@ -25,9 +25,8 @@ from datarobot_genai.langgraph.agent import LangGraphAgent
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_litellm.chat_models import ChatLiteLLM
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, MessagesState, StateGraph
-from psycopg import AsyncConnection
 
 config = Config()
 
@@ -35,7 +34,7 @@ config = Config()
 class MyAgent(LangGraphAgent):
     """Conversational agent with memory that remembers user details.
 
-    Uses LangGraph checkpointing with PostgreSQL for persistent memory
+    Uses LangGraph checkpointing with SQLite for persistent memory
     across conversations. Tracks user information like name and age.
     """
 
@@ -126,39 +125,27 @@ class MyAgent(LangGraphAgent):
             extra_body.get("thread_id")
             or extra_body.get("datarobot_association_id")
             or completion_create_params.get("datarobot_association_id")
+            or completion_create_params.get("association_id")
+            or completion_create_params.get("chatId")
             or self.thread_id
         )
         run_config = {"configurable": {"thread_id": request_thread_id}}
 
-        if config.postgres_uri:
+        if config.sqlite_path:
             # Check if streaming is requested
             if is_streaming(completion_create_params):
-                return self._stream_with_db(
+                # For streaming: use helper that keeps connection open
+                return self._stream_with_sqlite(
                     input_command,
                     completion_create_params,
                     run_config,
                 )
             else:
                 # Non-streaming: execute within the context
-                async with await AsyncConnection.connect(
-                    config.postgres_uri, autocommit=True
-                ) as conn:
-                    # Disable prepared statements for Supabase transaction mode
-                    conn.prepare_threshold = 0
-                    try:
-                        async with conn.cursor() as cur:
-                            await cur.execute("DEALLOCATE ALL")
-                    except Exception:
-                        pass
-
-                    checkpointer = AsyncPostgresSaver(conn)
-                    try:
-                        await checkpointer.setup()
-                    except Exception:
-                        pass
-
+                async with AsyncSqliteSaver.from_conn_string(
+                    config.sqlite_path
+                ) as checkpointer:
                     agent_graph = self.workflow.compile(checkpointer=checkpointer)
-
                     return await self._execute_graph(
                         input_command,
                         completion_create_params,
@@ -176,47 +163,28 @@ class MyAgent(LangGraphAgent):
                 run_config,
             )
 
-    async def _stream_with_db(
+    async def _stream_with_sqlite(
         self, input_command, completion_create_params, run_config
     ):
-        """Helper to stream response while keeping DB connection open."""
+        """Helper to stream response while keeping SQLite connection open."""
         from datarobot_genai.langgraph.agent import is_streaming
 
-        try:
-            async with await AsyncConnection.connect(
-                config.postgres_uri, autocommit=True
-            ) as conn:
-                conn.prepare_threshold = 0
-                try:
-                    async with conn.cursor() as cur:
-                        await cur.execute("DEALLOCATE ALL")
-                except Exception:
-                    pass
+        async with AsyncSqliteSaver.from_conn_string(
+            config.sqlite_path
+        ) as checkpointer:
+            agent_graph = self.workflow.compile(checkpointer=checkpointer)
 
-                checkpointer = AsyncPostgresSaver(conn)
-                try:
-                    await checkpointer.setup()
-                except Exception:
-                    pass
+            generator = await self._execute_graph(
+                input_command,
+                completion_create_params,
+                agent_graph,
+                is_streaming,
+                run_config,
+            )
 
-                agent_graph = self.workflow.compile(checkpointer=checkpointer)
-
-                # Get the generator from _execute_graph
-                # Note: _execute_graph returns the generator immediately for streaming
-                generator = await self._execute_graph(
-                    input_command,
-                    completion_create_params,
-                    agent_graph,
-                    is_streaming,
-                    run_config,
-                )
-
-                # We must iterate over the generator HERE, inside the async with block
-                async for item in generator:
-                    yield item
-
-        except Exception:
-            raise
+            # Iterate and yield within async with block to keep connection open
+            async for item in generator:
+                yield item
 
     async def _execute_graph(
         self,
