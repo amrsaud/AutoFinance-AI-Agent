@@ -50,6 +50,11 @@ class Config(DataRobotAppFrameworkBaseSettings):
     # Tavily API key for vehicle search
     tavily_api_key: str = Field(default="", validation_alias="TAVILY_API_KEY")
 
+    # DataRobot Vector DB for RAG
+    datarobot_vector_db_id: str | None = Field(
+        default=None, validation_alias="DATAROBOT_VECTOR_DB_ID"
+    )
+
     @property
     def local_dev_port(self) -> int:
         parsed_url = urlparse(self.agent_endpoint)
