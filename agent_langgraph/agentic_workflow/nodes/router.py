@@ -24,67 +24,94 @@ from opentelemetry import trace
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
-ROUTER_SYSTEM_PROMPT = """You are a strict intent classifier. Reply with ONLY one word: 'search', 'reset', or 'chat'.
+ROUTER_SYSTEM_PROMPT = """You are a strict intent classifier. Reply with ONLY one word: 'search', 'reset', 'select', or 'chat'.
 
-IMPORTANT: If the user mentions ANY car make, model, year, price, or wants to find/look for/search for a vehicle, ALWAYS return 'search'.
-
-Classifications:
-- 'search': User wants to find, search, look for, or get a car. ANY mention of car brands (Toyota, Hyundai, BMW, etc.) or car models (Tucson, Camry, X5) = search
-- 'reset': User explicitly wants to start over, reset, clear, or begin fresh
-- 'chat': General greetings, capability questions, or non-car related conversation
+IMPORTANT Rules:
+1. 'search': User wants to find/buy cars. Mentions BRAND (Toyota), MODEL (Corolla), PRICE, or "Looking for...".
+2. 'select': User wants to choose a car from a list. e.g., "Option 1", "The first one", "I'll take the BMW", "Select car 2".
+3. 'reset': "Start over", "Clear", "New search".
+4. 'chat': Greetings, "Thanks", "Hello". Or providing information like "My salary is 5000", "I am a freelancer".
 
 Examples:
 - "I want a Hyundai Tucson" -> search
-- "Find me a car under 500k" -> search
-- "Looking for a 2024 Toyota" -> search
-- "I need a BMW" -> search
-- "Show me cars" -> search
-- "What Toyota Corolla options are there?" -> search
+- "Option 2" -> select
+- "I choose the first one" -> select
+- "I like the red one" -> select
+- "My income is 10000" -> chat (This is info provided during profiling)
+- "Freelancer" -> chat
 - "Start over" -> reset
-- "Clear everything" -> reset
-- "Let's begin again" -> reset
-- "What can you do?" -> chat
 - "Hello" -> chat
-- "Thanks" -> chat
 
-Reply with exactly one word: search, reset, or chat"""
+Reply with exactly one word."""
 
 
 async def route_intent(state: dict, llm) -> str:
-    """Classify user intent: 'search', 'reset', or 'chat'.
+    """Classify user intent and route based on state.
 
     Args:
-        state: The current agent state containing messages.
-        llm: The language model to use for classification.
+        state: The current agent state.
+        llm: The language model.
 
     Returns:
-        str: The next node to route to ('search_param', 'reset', or 'respond').
+        str: Next node name.
     """
     with tracer.start_as_current_span("route_intent") as span:
         messages = state.get("messages", [])
         if not messages:
-            span.set_attribute("node.output.intent", "chat")
             return "respond"
 
-        last_message = messages[-1].content
-        span.set_attribute("node.input", last_message[:100])
+        # Check for state-based overrides (Financing Flow)
+        selected_vehicle = state.get("selected_vehicle")
+        user_profile = state.get("user_profile")
 
-        # Get last 5 messages for context to handle "yes", "ok" etc.
+        # Determine intent of NEW message
         recent_messages = messages[-5:]
-
-        # Use LLM to classify intent
         response = await llm.ainvoke(
             [SystemMessage(content=ROUTER_SYSTEM_PROMPT)] + recent_messages
         )
-
         intent = response.content.strip().lower()
         span.set_attribute("node.output.intent", intent)
+        logger.info(
+            f"Router Intent: {intent} | Vehicle Set: {bool(selected_vehicle)} | Profile Set: {bool(user_profile)}"
+        )
 
-        logger.info(f"Routed intent: {intent}")
-
+        # 1. Global Exits
         if "reset" in intent:
             return "reset"
-        elif "search" in intent:
+        if "search" in intent:
+            # If user wants to search again, allow it (clears selection in search_param/market_search implicit?)
+            # Ideally search_param should clear old selection.
+            # We will let 'search_param' handle new query.
             return "search_param"
-        else:
-            return "respond"
+
+        # 2. Financing / Profiling Flow
+
+        # If user explicitly selects a vehicle, go to profiling (which handles selection)
+        if "select" in intent:
+            return "profiling"
+
+        # If we are already in the financing loop (Vehicle Selected)
+        if selected_vehicle:
+            # If profile is fully complete (object exists and fields valid? - Assume object existence = complete for routing,
+            # but profiling node ensures completeness before creating object.
+            # Wait, our `profiling` node only creates `UserProfile` object when ALL fields present.
+            # So if `user_profile` is NOT None, it is Complete.
+            # Check if profile is TRULY complete (all required fields present)
+            # user_profile might be a partial object from profiling node
+            is_complete = (
+                user_profile
+                and user_profile.monthly_income is not None
+                and user_profile.employment_type is not None
+                and user_profile.existing_debt_obligations is not None
+                and user_profile.contact_name
+                and user_profile.contact_phone
+            )
+
+            if is_complete:
+                return "financing"
+            else:
+                # Profile incomplete, any "chat" (providing info) goes to profiling
+                return "profiling"
+
+        # 3. Default Fallback
+        return "respond"

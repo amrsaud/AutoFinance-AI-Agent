@@ -31,10 +31,13 @@ from models import AgentState
 from nodes import (
     check_confirmation,
     extract_search_params,
+    financing_node,
+    profiling_node,
     reset_state,
     respond,
     route_intent,
     search_market,
+    selection_node,
     should_execute_search,
 )
 
@@ -85,17 +88,14 @@ class MyAgent(LangGraphAgent):
         """Build the Market Discovery agent workflow.
 
         Graph Structure:
-        - router: Classifies intent (search/confirm/reset/chat)
+        - router: Classifies intent (search/confirm/reset/chat/select)
         - search_param: Extracts search parameters, asks for confirmation
         - check_confirmation: Validates user confirmation
         - market_search: Executes Tavily search
+        - profiling: Collects user profile (Loop)
+        - financing: Calculates quotes (RAG + Math)
         - respond: Generates conversational responses
         - reset: Resets state when user requests
-
-        Human-in-the-Loop Flow:
-        1. search_param extracts params → END (pauses for user confirmation)
-        2. User confirms → router detects confirmation → check_confirmation
-        3. If confirmed → market_search → respond → END
 
         Returns:
             StateGraph: The configured workflow graph.
@@ -107,6 +107,9 @@ class MyAgent(LangGraphAgent):
         workflow.add_node("search_param", self._extract_search_params)
         workflow.add_node("check_confirmation", self._check_confirmation)
         workflow.add_node("market_search", self._search_market)
+        workflow.add_node("selection", self._selection_node)
+        workflow.add_node("profiling", self._profiling_node)
+        workflow.add_node("financing", self._financing_node)
         workflow.add_node("respond", self._respond)
         workflow.add_node("reset", self._reset_state)
 
@@ -120,7 +123,10 @@ class MyAgent(LangGraphAgent):
             {
                 "search_param": "search_param",
                 "check_confirmation": "check_confirmation",
-                "market_search": "market_search",  # Direct route if already confirmed
+                "market_search": "market_search",
+                "profiling": "profiling",  # Fallback if manually routed
+                "selection": "selection",  # Explicit selection intent
+                "financing": "financing",
                 "respond": "respond",
                 "reset": "reset",
             },
@@ -139,7 +145,30 @@ class MyAgent(LangGraphAgent):
             },
         )
 
-        workflow.add_edge("market_search", "respond")
+        # market_search should END to wait for user selection
+        workflow.add_edge("market_search", END)
+
+        # Selection moves to profiling or loops back if invalid
+        workflow.add_conditional_edges(
+            "selection",
+            self._check_selection_success,
+            {
+                "profiling": "profiling",
+                "end": END,
+            },
+        )
+
+        # Profiling loop: Check if complete
+        workflow.add_conditional_edges(
+            "profiling",
+            self._check_profile_complete,
+            {
+                "financing": "financing",
+                "end": END,  # If not complete, we END to wait for input.
+            },
+        )
+
+        workflow.add_edge("financing", END)
         workflow.add_edge("respond", END)
         workflow.add_edge("reset", END)
 
@@ -163,16 +192,37 @@ class MyAgent(LangGraphAgent):
         if next_node_from_router == "reset":
             return "reset"
 
+        # If router detected SELECT (explicit intent), go there
+        if next_node_from_router == "profiling":
+            # Wait, Router.py returns 'profiling' for 'select'.
+            # I should update Router.py to return 'selection' or map 'profiling' -> 'selection' here IF no vehicle selected.
+            # Let's handle this in Route Logic or Update Router.py?
+            # User Request was to add MISSING NODE.
+            # So I added Selection.
+            # Now I need to map Router's "select" -> "selection".
+            pass  # Logic handled below
+
         # If we have pending search params (waiting for confirmation)
         # Route to check_confirmation where LLM will classify the intent
         if search_params and not search_confirmed:
             return "check_confirmation"
 
         # If already confirmed and search_params exist, can go directly to search
-        if search_params and search_confirmed:
+        # BUT only if intent is 'search' or we are resuming?
+        # If intent is 'select', we should NOT go to 'market_search'.
+        if search_params and search_confirmed and "search" in next_node_from_router:
             return "market_search"
 
-        # Follow router's decision
+        # If Router says "profiling" (Select Intent from Router.py)
+        # We should check if we have a vehicle.
+        # If NO vehicle, map to "selection".
+        # If YES vehicle, map to "profiling".
+
+        if next_node_from_router == "profiling":
+            if not state.get("selected_vehicle"):
+                return "selection"
+            return "profiling"
+
         return next_node_from_router
 
     async def _route_intent(self, state: AgentState) -> dict:
@@ -208,6 +258,46 @@ class MyAgent(LangGraphAgent):
     async def _reset_state(self, state: AgentState) -> dict:
         """Reset agent state to initial values."""
         return await reset_state(state)
+
+    async def _profiling_node(self, state: AgentState) -> dict:
+        """Execute profiling loop."""
+        llm = self.llm()
+        return await profiling_node(state, llm)
+
+    async def _selection_node(self, state: AgentState) -> dict:
+        """Execute selection logic."""
+        llm = self.llm()
+        return await selection_node(state, llm)
+
+    async def _financing_node(self, state: AgentState) -> dict:
+        """Execute financing logic."""
+        llm = self.llm()
+        return await financing_node(state, llm)
+
+    def _check_profile_complete(self, state: AgentState) -> str:
+        """Check if user profile is complete to proceed to financing."""
+        profile = state.get("user_profile")
+        # Check required fields
+        # Note: models.py fields are Optional, so we check existence here.
+        # We need Income and Employment Type for Policy + Calculator.
+        # Contact info required per user instruction.
+        if (
+            profile
+            and profile.monthly_income is not None
+            and profile.employment_type is not None
+            and profile.existing_debt_obligations is not None
+            and profile.contact_name
+            and profile.contact_phone
+            # Email?
+        ):
+            return "financing"
+        return "end"  # Loop back (via END + user input) if not complete
+
+    def _check_selection_success(self, state: AgentState) -> str:
+        """Check if a vehicle was successfully selected."""
+        if state.get("selected_vehicle"):
+            return "profiling"
+        return "end"  # Loop back to let user try selecting again
 
     async def _invoke(self, completion_create_params):
         """Override to compile workflow with checkpointer for memory persistence."""

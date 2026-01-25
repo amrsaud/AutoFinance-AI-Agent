@@ -104,6 +104,7 @@ async def search_market(state: dict, llm) -> dict:
         span.set_attribute("node.output.vehicle_count", vehicle_count)
 
         # Format response
+        # Format response
         if vehicles:
             response = f"🚗 Found **{vehicle_count}** vehicles:\n\n"
             for i, v in enumerate(vehicles, 1):
@@ -116,7 +117,7 @@ async def search_market(state: dict, llm) -> dict:
                 if v.location:
                     response += f"   📍 Location: {v.location}\n"
                 response += f"   🔗 [{v.source}]({v.source_url})\n\n"
-            response += "Would you like more details about any of these vehicles?"
+            response += "Reply with **'Option 1'** (or any number) to checks **Financing Options**."
         else:
             response = (
                 "❌ No vehicles found matching your criteria.\n\n"
@@ -125,8 +126,14 @@ async def search_market(state: dict, llm) -> dict:
 
         logger.info(f"Found {vehicle_count} vehicles")
 
+        # Return results and CLEAR any previous financing state (vehicle selection, profile, quotes)
+        # to prevent state pollution from previous searches.
         return {
             "search_results": vehicles or [],
-            "search_confirmed": True,
+            "search_confirmed": bool(vehicles),
+            "selected_vehicle": None,
+            "user_profile": None,
+            "eligible_policies": None,
+            "generated_quotes": None,
             "messages": [AIMessage(content=response)],
         }

@@ -14,11 +14,14 @@
 """Graph nodes for the AutoFinance AI Agent."""
 
 from .confirmation import check_confirmation, should_execute_search
+from .financing import financing_node
 from .market_search import search_market
+from .profiling import profiling_node
 from .reset import reset_state
 from .respond import respond
 from .router import route_intent
 from .search_param import extract_search_params
+from .selection import selection_node
 
 __all__ = [
     "route_intent",
@@ -28,4 +31,7 @@ __all__ = [
     "reset_state",
     "check_confirmation",
     "should_execute_search",
+    "profiling_node",
+    "financing_node",
+    "selection_node",
 ]
