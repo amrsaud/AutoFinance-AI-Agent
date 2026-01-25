@@ -269,7 +269,7 @@ class MyAgent(LangGraphAgent):
             or completion_create_params.get("association_id")
             or completion_create_params.get("chatId")
             or metadata.get("thread_id")
-            or str(uuid.uuid4())
+            or "GENERAL_THREAD_ID"
         )
         return {"configurable": {"thread_id": request_thread_id}}
 
