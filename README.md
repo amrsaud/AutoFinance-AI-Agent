@@ -12,8 +12,7 @@ The **AutoFinance AI Agent** is an autonomous "Financial Co-Pilot" designed to b
 *   **🧠 Intelligent Routing**: Context-aware routing between onboarding, searching, profiling, and specific inquiries.
 *   **🛡️ Policy Enforcement (RAG)**: Retrieves and applies internal credit policies (interest rates, DBR limits) based on user profile and vehicle age.
 *   **🧮 Loan Quotation**: Precise calculation of monthly installments using the PMT formula and affordability checks.
-*   **💾 State Persistence**: Remembers user context (selected car, income, employment) across sessions using PostgreSQL checkpoints.
-*   **📝 Lead Capture**: Collects and validates customer PII, storing structured applications in Supabase.
+*   **💾 State Persistence**: Remembers user context (selected car, income, employment) across sessions using SQLite checkpoints.
 *   **🚦 Human-in-the-Loop**: Explicit validation steps before executing searches or submitting sensitive applications.
 
 ---
@@ -27,7 +26,6 @@ This project is built on the **DataRobot Agentic Workflow** template using **Lan
 | **Orchestration** | **LangGraph** | State-based graph managing the 5-phase user journey. |
 | **Reasoning** | **DataRobot LLM Gateway** | Access to hosted LLMs (e.g., GPT-4o) with reliability guards. |
 | **Memory** | **SQLite** | `langgraph.checkpoint.sqlite` for session state persistence. |
-| **Storage** | **Supabase** | `applications` table for storing submitted loan requests. |
 | **Search** | **Tavily API** | Optimized search for parsing unstructured vehicle listing data. |
 | **Compute** | **DataRobot Custom Models** | Serverless runtime for hosting the agent logic. |
 
@@ -50,12 +48,12 @@ agent_langgraph/
 │   │   ├── market_search.py  #    → Tavily search execution
 │   │   ├── policy_rag.py     #    → Credit policy retrieval
 │   │   ├── quotation.py      #    → Installment calculation
-│   │   └── submission.py     #    → Supabase data write
+│   │   └── submission.py     #    → Supabase data write (Deprecated/Future)
 │   ├── tools/                # 🛠️ Tool Implementations
 │   │   ├── tavily_search.py  #    → Search API wrapper
-│   │   └── supabase_storage.py #  → Database operations
-│   └── persistence/          # 💾 State Management
-│       └── supabase_checkpointer.py # → PostgresSaver logic
+│   │   ├── policy_retriever.py #  → Vector DB RAG tool
+│   │   └── calculator.py     #    → Loan math tool
+│   └── custom.py             # 🔌 DataRobot hooks
 ├── tests/                    # 🧪 Unit tests
 └── Taskfile.yml              # 📋 Build & Run commands
 ```
@@ -83,13 +81,9 @@ Populate the following secrets:
 DATAROBOT_API_TOKEN=...
 DATAROBOT_ENDPOINT=...
 
-# Supabase (Memory & Storage)
-SUPABASE_URL=https://<your-project>.supabase.co
-SUPABASE_KEY=...
-POSTGRES_URI=postgres://postgres.[ref]:[pass]@aws-0-[region].pooler.supabase.co:6543/postgres
-
 # Tools
 TAVILY_API_KEY=tvly-...
+DATAROBOT_VECTOR_DB_ID=...
 ```
 
 ### 3. Install Dependencies
@@ -98,20 +92,7 @@ task agent_langgraph:install
 ```
 
 ### 4. Create Database Tables
-Run the following SQL in your Supabase SQL Editor to create the application storage table (Checkpoint tables are auto-created):
-
-```sql
-CREATE TABLE applications (
-  request_id UUID PRIMARY KEY,
-  session_id TEXT,
-  user_name TEXT NOT NULL,
-  contact_details JSONB,
-  vehicle_summary JSONB,
-  financial_summary JSONB,
-  status TEXT DEFAULT 'pending_review',
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
+*(Automated via SQLite checkpointer, no manual setup required for local dev)*
 
 ---
 
