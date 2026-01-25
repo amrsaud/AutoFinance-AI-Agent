@@ -279,7 +279,7 @@ class MyAgent(LangGraphAgent):
         """Execute graph and stream results correctly."""
         # Unwrap Command if present to ensure state update triggers START
         graph_input = input_command
-        if hasattr(input_command, "update"):
+        if hasattr(input_command, "update") and not isinstance(input_command, dict):
             graph_input = input_command.update
 
         graph_stream = compiled_graph.astream(
@@ -306,7 +306,7 @@ class MyAgent(LangGraphAgent):
         """Execute graph synchronously."""
         # Unwrap Command if present
         graph_input = input_command
-        if hasattr(input_command, "update"):
+        if hasattr(input_command, "update") and not isinstance(input_command, dict):
             graph_input = input_command.update
 
         # Use parent implementation logic for sync execution or simplified one
