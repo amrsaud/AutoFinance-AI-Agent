@@ -129,13 +129,13 @@ class MyAgent(LangGraphAgent):
         # search_param ends (pause for confirmation)
         workflow.add_edge("search_param", END)
 
-        # check_confirmation decides whether to search or respond
+        # check_confirmation decides whether to search or end
         workflow.add_conditional_edges(
             "check_confirmation",
             self._should_execute_search,
             {
                 "market_search": "market_search",
-                "respond": "respond",
+                "end": END,
             },
         )
 
@@ -214,8 +214,46 @@ class MyAgent(LangGraphAgent):
         from datarobot_genai.langgraph.agent import is_streaming
 
         input_command = self.convert_input_message(completion_create_params)
+        run_config = self._get_run_config(completion_create_params)
 
-        # Extract thread_id from completion_create_params
+        if config.sqlite_path:
+            if is_streaming(completion_create_params):
+                # We need the context manager to be active DURING the iteration
+                async def wrapped_generator():
+                    async with AsyncSqliteSaver.from_conn_string(
+                        config.sqlite_path
+                    ) as checkpointer:
+                        agent_graph = self.workflow.compile(checkpointer=checkpointer)
+                        async for item in self._execute_graph_stream(
+                            input_command,
+                            completion_create_params,
+                            agent_graph,
+                            run_config,
+                        ):
+                            yield item
+
+                return wrapped_generator()
+            else:
+                async with AsyncSqliteSaver.from_conn_string(
+                    config.sqlite_path
+                ) as checkpointer:
+                    agent_graph = self.workflow.compile(checkpointer=checkpointer)
+                    return await self._execute_graph_sync(
+                        input_command, completion_create_params, agent_graph, run_config
+                    )
+        else:
+            agent_graph = self.workflow.compile()
+            if is_streaming(completion_create_params):
+                return self._execute_graph_stream(
+                    input_command, completion_create_params, agent_graph, run_config
+                )
+            else:
+                return await self._execute_graph_sync(
+                    input_command, completion_create_params, agent_graph, run_config
+                )
+
+    def _get_run_config(self, completion_create_params) -> dict:
+        """Extract thread_id and build run config."""
         extra_body = completion_create_params.get("extra_body") or {}
         metadata = completion_create_params.get("metadata") or {}
         extra_body_metadata = extra_body.get("metadata") or {}
@@ -233,67 +271,13 @@ class MyAgent(LangGraphAgent):
             or metadata.get("thread_id")
             or str(uuid.uuid4())
         )
-        run_config = {"configurable": {"thread_id": request_thread_id}}
+        return {"configurable": {"thread_id": request_thread_id}}
 
-        if config.sqlite_path:
-            if is_streaming(completion_create_params):
-                return self._stream_with_sqlite(
-                    input_command,
-                    completion_create_params,
-                    run_config,
-                )
-            else:
-                async with AsyncSqliteSaver.from_conn_string(
-                    config.sqlite_path
-                ) as checkpointer:
-                    agent_graph = self.workflow.compile(checkpointer=checkpointer)
-                    return await self._execute_graph(
-                        input_command,
-                        completion_create_params,
-                        agent_graph,
-                        is_streaming,
-                        run_config,
-                    )
-        else:
-            return await self._execute_graph(
-                input_command,
-                completion_create_params,
-                self.workflow.compile(),
-                is_streaming,
-                run_config,
-            )
-
-    async def _stream_with_sqlite(
-        self, input_command, completion_create_params, run_config
+    async def _execute_graph_stream(
+        self, input_command, completion_create_params, compiled_graph, run_config
     ):
-        """Helper to stream response while keeping SQLite connection open."""
-        from datarobot_genai.langgraph.agent import is_streaming
-
-        async with AsyncSqliteSaver.from_conn_string(
-            config.sqlite_path
-        ) as checkpointer:
-            agent_graph = self.workflow.compile(checkpointer=checkpointer)
-
-            generator = await self._execute_graph(
-                input_command,
-                completion_create_params,
-                agent_graph,
-                is_streaming,
-                run_config,
-            )
-
-            async for item in generator:
-                yield item
-
-    async def _execute_graph(
-        self,
-        input_command,
-        completion_create_params,
-        compiled_graph,
-        is_streaming,
-        run_config,
-    ):
-        """Execute the compiled graph."""
+        """Execute graph and stream results correctly."""
+        # Unwrap Command if present to ensure state update triggers START
         graph_input = input_command
         if hasattr(input_command, "update"):
             graph_input = input_command.update
@@ -301,7 +285,7 @@ class MyAgent(LangGraphAgent):
         graph_stream = compiled_graph.astream(
             input=graph_input,
             config=run_config,
-            debug=True,
+            debug=self.verbose,
             stream_mode=["messages", "updates"],
             subgraphs=True,
         )
@@ -312,28 +296,44 @@ class MyAgent(LangGraphAgent):
             "total_tokens": 0,
         }
 
-        if is_streaming(completion_create_params):
-            return self._stream_generator(graph_stream, usage_metrics)
-        else:
-            events = []
-            async for event in graph_stream:
-                if isinstance(event, dict):
-                    events.append(event)
-                elif isinstance(event, tuple):
-                    if len(event) == 3:
-                        namespace, mode, payload = event
-                    elif len(event) == 2:
-                        mode, payload = event
-                        namespace = None
-                    else:
-                        continue
+        # Use our custom generator that handles AIMessage
+        async for item in self._stream_generator(graph_stream, usage_metrics):
+            yield item
 
-                    if mode == "updates":
-                        events.append(payload)
+    async def _execute_graph_sync(
+        self, input_command, completion_create_params, compiled_graph, run_config
+    ):
+        """Execute graph synchronously."""
+        # Unwrap Command if present
+        graph_input = input_command
+        if hasattr(input_command, "update"):
+            graph_input = input_command.update
 
-            for update in events:
-                current_node = next(iter(update))
-                node_data = update[current_node]
+        # Use parent implementation logic for sync execution or simplified one
+        # Calling parent logic is tricky without super()._invoke, so we replicate the sync logic
+        # but using astream for consistency
+
+        graph_stream = compiled_graph.astream(
+            input=graph_input,
+            config=run_config,
+            debug=self.verbose,
+            stream_mode=["updates"],
+            subgraphs=True,
+        )
+
+        events = []
+        usage_metrics = {
+            "completion_tokens": 0,
+            "prompt_tokens": 0,
+            "total_tokens": 0,
+        }
+
+        async for _, mode, event in graph_stream:
+            if mode == "updates":
+                events.append(event)
+                # Accumulate metrics
+                current_node = next(iter(event))
+                node_data = event[current_node]
                 current_usage = node_data.get("usage", {}) if node_data else {}
                 if current_usage:
                     usage_metrics["total_tokens"] += current_usage.get(
@@ -346,15 +346,151 @@ class MyAgent(LangGraphAgent):
                         "completion_tokens", 0
                     )
 
-            pipeline_interactions = self.create_pipeline_interactions_from_events(
-                events
-            )
+        pipeline_interactions = self.create_pipeline_interactions_from_events(events)
 
-            state = await compiled_graph.aget_state(run_config)
-            messages = state.values.get("messages", [])
-            response_text = str(messages[-1].content) if messages else ""
+        state = await compiled_graph.aget_state(run_config)
+        messages = state.values.get("messages", [])
+        response_text = str(messages[-1].content) if messages else ""
 
-            return response_text, pipeline_interactions, usage_metrics
+        return response_text, pipeline_interactions, usage_metrics
+
+    async def _stream_generator(self, graph_stream, usage_metrics):
+        """Override stream generator to handle AIMessage objects."""
+        from ag_ui.core import (
+            EventType,
+            TextMessageContentEvent,
+            TextMessageEndEvent,
+            TextMessageStartEvent,
+            ToolCallArgsEvent,
+            ToolCallEndEvent,
+            ToolCallResultEvent,
+            ToolCallStartEvent,
+        )
+        from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+
+        current_message_id = None
+        tool_call_id = ""
+
+        async for _, mode, event in graph_stream:
+            if mode == "messages":
+                message_event = event
+                message = message_event[0]
+
+                if isinstance(message, ToolMessage):
+                    # Handle ToolMessage (Original Logic)
+                    yield (
+                        ToolCallEndEvent(
+                            type=EventType.TOOL_CALL_END,
+                            tool_call_id=message.tool_call_id,
+                        ),
+                        None,
+                        usage_metrics,
+                    )
+                    yield (
+                        ToolCallResultEvent(
+                            type=EventType.TOOL_CALL_RESULT,
+                            message_id=message.id,
+                            tool_call_id=message.tool_call_id,
+                            content=message.content,
+                            role="tool",
+                        ),
+                        None,
+                        usage_metrics,
+                    )
+                    tool_call_id = ""
+
+                elif isinstance(message, (AIMessageChunk, AIMessage)):
+                    # Handle AIMessageChunk AND AIMessage
+                    if (
+                        hasattr(message, "tool_call_chunks")
+                        and message.tool_call_chunks
+                    ):
+                        # Logic for tool calls (chunked)
+                        for tool_call_chunk in message.tool_call_chunks:
+                            if name := tool_call_chunk.get("name"):
+                                tool_call_id = tool_call_chunk["id"]
+                                yield (
+                                    ToolCallStartEvent(
+                                        type=EventType.TOOL_CALL_START,
+                                        tool_call_id=tool_call_id,
+                                        tool_call_name=name,
+                                        parent_message_id=message.id,
+                                    ),
+                                    None,
+                                    usage_metrics,
+                                )
+                            elif args := tool_call_chunk.get("args"):
+                                yield (
+                                    ToolCallArgsEvent(
+                                        type=EventType.TOOL_CALL_ARGS,
+                                        tool_call_id=tool_call_id,
+                                        delta=args,
+                                    ),
+                                    None,
+                                    usage_metrics,
+                                )
+                    elif message.content:
+                        # Logic for Text Content
+                        if message.id != current_message_id:
+                            if current_message_id:
+                                yield (
+                                    TextMessageEndEvent(
+                                        type=EventType.TEXT_MESSAGE_END,
+                                        message_id=current_message_id,
+                                    ),
+                                    None,
+                                    usage_metrics,
+                                )
+                            current_message_id = message.id
+                            yield (
+                                TextMessageStartEvent(
+                                    type=EventType.TEXT_MESSAGE_START,
+                                    message_id=message.id,
+                                    role="assistant",
+                                ),
+                                None,
+                                usage_metrics,
+                            )
+                        yield (
+                            TextMessageContentEvent(
+                                type=EventType.TEXT_MESSAGE_CONTENT,
+                                message_id=message.id,
+                                delta=message.content,
+                            ),
+                            None,
+                            usage_metrics,
+                        )
+
+            elif mode == "updates":
+                update_event = event
+                # Basic metrics accumulation from updates
+                current_node = next(iter(update_event))
+                node_data = update_event[current_node]
+                current_usage = node_data.get("usage", {}) if node_data else {}
+                if current_usage:
+                    usage_metrics["total_tokens"] += current_usage.get(
+                        "total_tokens", 0
+                    )
+                    usage_metrics["prompt_tokens"] += current_usage.get(
+                        "prompt_tokens", 0
+                    )
+                    usage_metrics["completion_tokens"] += current_usage.get(
+                        "completion_tokens", 0
+                    )
+
+                if current_message_id:
+                    yield (
+                        TextMessageEndEvent(
+                            type=EventType.TEXT_MESSAGE_END,
+                            message_id=current_message_id,
+                        ),
+                        None,
+                        usage_metrics,
+                    )
+                    current_message_id = None
+
+        # Final yield
+        yield "", None, usage_metrics
 
     def llm(
         self,
