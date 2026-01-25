@@ -35,6 +35,14 @@ class Vehicle(BaseModel):
     source_url: str = Field(..., description="Full URL to the vehicle listing")
 
 
+class VehicleList(BaseModel):
+    """List of extracted vehicles."""
+
+    vehicles: list[Vehicle] = Field(
+        ..., description="List of extracted vehicle details"
+    )
+
+
 class SearchParams(BaseModel):
     """Search parameters extracted from natural language user queries."""
 
@@ -58,6 +66,7 @@ class SearchParams(BaseModel):
             parts.append(self.model)
         if self.year_min:
             parts.append(str(self.year_min))
+        parts.append("for sale")
         parts.append("Egypt")  # Always include Egypt for location relevance
         return " ".join(parts)
 

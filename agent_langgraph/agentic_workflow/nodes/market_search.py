@@ -17,12 +17,11 @@ Executes Tavily search and parses results into Vehicle objects using LLM.
 """
 
 import logging
-from typing import List
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from opentelemetry import trace
 
-from models import Vehicle
+from models import Vehicle, VehicleList
 from tools.tavily_search import search_egyptian_cars
 
 logger = logging.getLogger(__name__)
@@ -39,7 +38,7 @@ For each listing, extract:
 - source: Must be 'hatla2ee' or 'dubizzle'
 - source_url: Full URL to the vehicle listing
 
-Return as a list of Vehicle objects.
+Return as a list of Vehicle objects wrapped in a VehicleList.
 Only include listings with valid URLs from hatla2ee.com or dubizzle.com.eg.
 If you cannot find any valid listings, return an empty list."""
 
@@ -74,15 +73,29 @@ async def search_market(state: dict, llm) -> dict:
         # Execute Tavily search with constructed query
         raw_results = search_egyptian_cars.invoke(query)
 
+        # Check for tool error
+        if raw_results.startswith("Error"):
+            logger.error(f"Search tool failed: {raw_results}")
+            return {
+                "search_results": [],
+                "search_confirmed": True,
+                "messages": [
+                    AIMessage(
+                        content=f"⚠️ Search failed: {raw_results}\n\nPlease check your configuration (e.g., TAVILY_API_KEY)."
+                    )
+                ],
+            }
+
         # Use LLM to extract structured Vehicle objects
         try:
-            structured_llm = llm.with_structured_output(List[Vehicle])
-            vehicles = await structured_llm.ainvoke(
+            structured_llm = llm.with_structured_output(VehicleList)
+            parsed_result = await structured_llm.ainvoke(
                 [
                     SystemMessage(content=PARSING_SYSTEM_PROMPT),
                     HumanMessage(content=raw_results),
                 ]
             )
+            vehicles = parsed_result.vehicles
         except Exception as e:
             logger.error(f"Error parsing vehicles: {e}")
             vehicles = []
