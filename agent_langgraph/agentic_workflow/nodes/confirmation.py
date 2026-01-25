@@ -140,7 +140,7 @@ def should_execute_search(state: dict) -> str:
         state: The current agent state.
 
     Returns:
-        str: "market_search" if confirmed, "respond" otherwise.
+        str: "market_search" if confirmed, "end" otherwise.
     """
     search_confirmed = state.get("search_confirmed", False)
     search_params = state.get("search_params")
@@ -148,4 +148,4 @@ def should_execute_search(state: dict) -> str:
     if search_params and search_confirmed:
         return "market_search"
     else:
-        return "respond"
+        return "end"

@@ -75,8 +75,8 @@ class TestGraphExecution:
         mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content="search"))
 
         with patch.object(agent, "llm", return_value=mock_llm):
-            state = AgentState(messages=[HumanMessage(content="Find a Toyota Corolla")])
-            state_dict = state.model_dump()
+            # AgentState is a TypedDict at runtime
+            state_dict = {"messages": [HumanMessage(content="Find a Toyota Corolla")]}
 
             result = await agent._route_intent(state_dict)
 
@@ -161,17 +161,14 @@ class TestStateTransitions:
         assert params_dict["make"] == "Toyota"
         assert params_dict["model"] == "Corolla"
 
-    def test_agent_state_includes_search_fields(self):
-        """Test AgentState has all required fields."""
-        state = AgentState(
-            messages=[], search_params=SearchParams(make="BMW"), search_confirmed=False
-        )
+    def test_agent_state_structure(self):
+        """Test AgentState initial structure."""
+        state = AgentState.get_initial_state()
 
-        print(f"State fields: {state.model_fields.keys()}")
-        assert hasattr(state, "search_params")
-        assert hasattr(state, "search_confirmed")
-        assert hasattr(state, "search_results")
-        assert hasattr(state, "messages")
+        assert "search_params" in state
+        assert "search_confirmed" in state
+        assert "search_results" in state
+        assert "messages" in state
 
 
 if __name__ == "__main__":
