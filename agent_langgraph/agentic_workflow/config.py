@@ -47,6 +47,9 @@ class Config(DataRobotAppFrameworkBaseSettings):
         default="http://localhost:8842", validation_alias="AGENT_LANGGRAPH_ENDPOINT"
     )
 
+    # Tavily API key for vehicle search
+    tavily_api_key: str = Field(default="", validation_alias="TAVILY_API_KEY")
+
     @property
     def local_dev_port(self) -> int:
         parsed_url = urlparse(self.agent_endpoint)
