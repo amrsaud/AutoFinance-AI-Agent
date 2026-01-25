@@ -1,9 +1,9 @@
 {
-    "python.defaultInterpreterPath": "/Users/amrsaud/Desktop/AutoFinance-AI-Agent/agent_langgraph/.venv/bin/python",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
     "python.analysis.typeCheckingMode": "basic",
     "python.autoComplete.extraPaths": [
-        "/Users/amrsaud/Desktop/AutoFinance-AI-Agent/agent_langgraph/.venv/lib/python3.12/site-packages",
-        "/Users/amrsaud/Desktop/AutoFinance-AI-Agent/agent_langgraph"
+        "${workspaceFolder}/.venv/lib/python3.12/site-packages",
+        "${workspaceFolder}"
     ],
     "editor.semanticHighlighting.enabled": true,
     "files.associations": {

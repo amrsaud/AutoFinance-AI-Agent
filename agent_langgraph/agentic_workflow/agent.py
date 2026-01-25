@@ -12,30 +12,47 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Conversational agent with memory persistence using LangGraph checkpointing.
-Remembers user details (name, age) across conversations.
+AutoFinance AI Agent - Market Discovery Agent with LangGraph.
+
+A conversational agent that helps users find vehicles in Egypt
+by searching hatla2ee.com and dubizzle.com.eg.
 """
 
 import uuid
 from typing import Any
 
 from config import Config
-from datarobot_genai.core.agents import make_system_prompt
 from datarobot_genai.langgraph.agent import LangGraphAgent
-from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_litellm.chat_models import ChatLiteLLM
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph import END, START, StateGraph
+from models import AgentState
+from nodes import (
+    check_confirmation,
+    extract_search_params,
+    reset_state,
+    respond,
+    route_intent,
+    search_market,
+    should_execute_search,
+)
 
 config = Config()
 
 
 class MyAgent(LangGraphAgent):
-    """Conversational agent with memory that remembers user details.
+    """AutoFinance AI Agent for vehicle market discovery in Egypt.
 
     Uses LangGraph checkpointing with SQLite for persistent memory
-    across conversations. Tracks user information like name and age.
+    across conversations. Supports:
+    - Vehicle search via Tavily API (hatla2ee.com, dubizzle.com.eg)
+    - Human-in-the-loop confirmation before search
+    - State reset on user request
+
+    Graph Flow:
+    1. User: "Find a Hyundai Tucson" → router → search_param → END (ask confirmation)
+    2. User: "yes" → router → check_confirmation → market_search → respond → END
     """
 
     def __init__(
@@ -48,7 +65,6 @@ class MyAgent(LangGraphAgent):
             **kwargs: Additional arguments passed to LangGraphAgent.
         """
         super().__init__(**kwargs)
-        # We don't initialize checkpointer here, we limit its scope to the request
 
     @property
     def checkpointer(self) -> None:
@@ -66,42 +82,132 @@ class MyAgent(LangGraphAgent):
 
     @property
     def workflow(self) -> StateGraph:
-        """Build the conversational agent workflow.
+        """Build the Market Discovery agent workflow.
 
-        Returns a react agent which handles multi-turn conversations correctly.
+        Graph Structure:
+        - router: Classifies intent (search/confirm/reset/chat)
+        - search_param: Extracts search parameters, asks for confirmation
+        - check_confirmation: Validates user confirmation
+        - market_search: Executes Tavily search
+        - respond: Generates conversational responses
+        - reset: Resets state when user requests
+
+        Human-in-the-Loop Flow:
+        1. search_param extracts params → END (pauses for user confirmation)
+        2. User confirms → router detects confirmation → check_confirmation
+        3. If confirmed → market_search → respond → END
+
+        Returns:
+            StateGraph: The configured workflow graph.
         """
-        # Create a react agent - this returns a CompiledGraph
-        # We need to re-compile it with the checkpointer at runtime
-        # So we reconstruct the graph here
+        workflow = StateGraph(AgentState)
 
-        workflow = StateGraph(MessagesState)
-        workflow.add_node("agent", self._call_model)
-        workflow.add_edge(START, "agent")
-        workflow.add_edge("agent", END)
+        # Add nodes
+        workflow.add_node("router", self._route_intent)
+        workflow.add_node("search_param", self._extract_search_params)
+        workflow.add_node("check_confirmation", self._check_confirmation)
+        workflow.add_node("market_search", self._search_market)
+        workflow.add_node("respond", self._respond)
+        workflow.add_node("reset", self._reset_state)
+
+        # Add edges
+        workflow.add_edge(START, "router")
+
+        # Router decides where to go based on intent and state
+        workflow.add_conditional_edges(
+            "router",
+            self._route_decision,
+            {
+                "search_param": "search_param",
+                "check_confirmation": "check_confirmation",
+                "market_search": "market_search",  # Direct route if already confirmed
+                "respond": "respond",
+                "reset": "reset",
+            },
+        )
+
+        # search_param ends (pause for confirmation)
+        workflow.add_edge("search_param", END)
+
+        # check_confirmation decides whether to search or respond
+        workflow.add_conditional_edges(
+            "check_confirmation",
+            self._should_execute_search,
+            {
+                "market_search": "market_search",
+                "respond": "respond",
+            },
+        )
+
+        workflow.add_edge("market_search", "respond")
+        workflow.add_edge("respond", END)
+        workflow.add_edge("reset", END)
 
         return workflow
 
-    async def _call_model(self, state: MessagesState):
-        """Invoke the LLM with the current state."""
-        system_prompt = make_system_prompt(
-            "You are a friendly and helpful conversational assistant.\n\n"
-            "IMPORTANT INSTRUCTIONS:\n"
-            "1. When a user tells you their name or age, remember it for future conversations.\n"
-            "2. If you know the user's name, greet them by name in responses.\n"
-            "3. Keep track of personal details shared by the user.\n"
-            "4. If asked about previously shared information, recall it accurately.\n"
-            "5. Be natural and conversational in your responses.\n\n"
-            "Example interactions:\n"
-            "- User: 'My name is John' -> Remember and acknowledge\n"
-            "- User: 'I'm 25 years old' -> Remember the age\n"
-            "- User: 'What's my name?' -> Recall 'John' if previously shared\n"
-        )
+    def _route_decision(self, state: AgentState) -> str:
+        """Determine the next node based on intent and state.
 
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
-        response = await self.llm(
-            preferred_model="datarobot/azure/gpt-5-mini-2025-08-07"
-        ).ainvoke(messages)
-        return {"messages": [response]}
+        Routing Logic:
+        1. If we have pending search_params (not confirmed) → check_confirmation (LLM classifies)
+        2. If already confirmed and search_params exist → market_search
+        3. Otherwise → follow router's decision (search_param/reset/respond)
+
+        The LLM classification happens in check_confirmation node, not here.
+        """
+        search_params = state.get("search_params")
+        search_confirmed = state.get("search_confirmed", False)
+        next_node_from_router = state.get("_next_node", "respond")
+
+        # If router detected RESET, prioritize that even if searching
+        if next_node_from_router == "reset":
+            return "reset"
+
+        # If we have pending search params (waiting for confirmation)
+        # Route to check_confirmation where LLM will classify the intent
+        if search_params and not search_confirmed:
+            return "check_confirmation"
+
+        # If already confirmed and search_params exist, can go directly to search
+        if search_params and search_confirmed:
+            return "market_search"
+
+        # Follow router's decision
+        return next_node_from_router
+
+    async def _route_intent(self, state: AgentState) -> dict:
+        """Route user intent to appropriate node."""
+        llm = self.llm()
+        next_node = await route_intent(state, llm)
+        return {"_next_node": next_node}
+
+    async def _extract_search_params(self, state: AgentState) -> dict:
+        """Extract search parameters from user query."""
+        llm = self.llm()
+        return await extract_search_params(state, llm)
+
+    async def _check_confirmation(self, state: AgentState) -> dict:
+        """Check if user confirmed the search using LLM classification."""
+        llm = self.llm()
+        return await check_confirmation(state, llm)
+
+    def _should_execute_search(self, state: AgentState) -> str:
+        """Determine if search should be executed."""
+        return should_execute_search(state)
+
+    async def _search_market(self, state: AgentState) -> dict:
+        """Execute market search via Tavily."""
+        llm = self.llm()
+        return await search_market(state, llm)
+
+    async def _respond(self, state: AgentState) -> dict:
+        """Generate conversational response."""
+        llm = self.llm()
+        return await respond(state, llm)
+
+    async def _reset_state(self, state: AgentState) -> dict:
+        """Reset agent state to initial values."""
+        return await reset_state(state)
 
     async def _invoke(self, completion_create_params):
         """Override to compile workflow with checkpointer for memory persistence."""
@@ -110,7 +216,6 @@ class MyAgent(LangGraphAgent):
         input_command = self.convert_input_message(completion_create_params)
 
         # Extract thread_id from completion_create_params
-        # DataRobot uses 'datarobot_association_id' for conversation tracking
         extra_body = completion_create_params.get("extra_body") or {}
         metadata = completion_create_params.get("metadata") or {}
         extra_body_metadata = extra_body.get("metadata") or {}
@@ -126,21 +231,18 @@ class MyAgent(LangGraphAgent):
             or completion_create_params.get("association_id")
             or completion_create_params.get("chatId")
             or metadata.get("thread_id")
-            or str(uuid.uuid4())  # Generate new UUID if no thread_id provided
+            or str(uuid.uuid4())
         )
         run_config = {"configurable": {"thread_id": request_thread_id}}
 
         if config.sqlite_path:
-            # Check if streaming is requested
             if is_streaming(completion_create_params):
-                # For streaming: use helper that keeps connection open
                 return self._stream_with_sqlite(
                     input_command,
                     completion_create_params,
                     run_config,
                 )
             else:
-                # Non-streaming: execute within the context
                 async with AsyncSqliteSaver.from_conn_string(
                     config.sqlite_path
                 ) as checkpointer:
@@ -153,7 +255,6 @@ class MyAgent(LangGraphAgent):
                         run_config,
                     )
         else:
-            # Fallback without persistence
             return await self._execute_graph(
                 input_command,
                 completion_create_params,
@@ -181,7 +282,6 @@ class MyAgent(LangGraphAgent):
                 run_config,
             )
 
-            # Iterate and yield within async with block to keep connection open
             async for item in generator:
                 yield item
 
@@ -194,8 +294,6 @@ class MyAgent(LangGraphAgent):
         run_config,
     ):
         """Execute the compiled graph."""
-
-        # Unwrap Command object to ensure we trigger a new run from START
         graph_input = input_command
         if hasattr(input_command, "update"):
             graph_input = input_command.update
@@ -219,10 +317,9 @@ class MyAgent(LangGraphAgent):
         else:
             events = []
             async for event in graph_stream:
-                # print(f"DEBUG: Event: {event}")
-                if isinstance(event, dict):  # values or updates
+                if isinstance(event, dict):
                     events.append(event)
-                elif isinstance(event, tuple):  # (namespace, mode, payload)
+                elif isinstance(event, tuple):
                     if len(event) == 3:
                         namespace, mode, payload = event
                     elif len(event) == 2:
@@ -233,8 +330,6 @@ class MyAgent(LangGraphAgent):
 
                     if mode == "updates":
                         events.append(payload)
-
-            # print(f"DEBUG: Collected {len(events)} events.")
 
             for update in events:
                 current_node = next(iter(update))
@@ -255,14 +350,6 @@ class MyAgent(LangGraphAgent):
                 events
             )
 
-            # Extract response - react agent final response is usually the last message
-            if events:
-                # Find the last message
-                # For react agent, we look for the last 'agent' or 'chatbot' update
-                # Or just use aget_state() to get the final state
-                pass
-
-            # Robust way to get the final message from state
             state = await compiled_graph.aget_state(run_config)
             messages = state.values.get("messages", [])
             response_text = str(messages[-1].content) if messages else ""
