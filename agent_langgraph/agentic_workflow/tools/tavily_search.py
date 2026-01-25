@@ -50,11 +50,11 @@ def search_egyptian_cars(query: str) -> str:
             client = TavilyClient(api_key=config.tavily_api_key)
 
             # Search with site filtering for Egyptian marketplaces
-            full_query = f"{query} site:hatla2ee.com OR site:dubizzle.com.eg"
             results = client.search(
-                query=full_query,
+                query=query,
                 search_depth="advanced",
                 max_results=10,
+                include_domains=["hatla2ee.com", "dubizzle.com.eg"],
             )
 
             result_count = len(results.get("results", []))
