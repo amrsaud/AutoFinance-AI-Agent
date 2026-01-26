@@ -18,7 +18,6 @@ A conversational agent that helps users find vehicles in Egypt
 by searching hatla2ee.com and dubizzle.com.eg.
 """
 
-import uuid
 from typing import Any
 
 from config import Config
@@ -475,6 +474,20 @@ class MyAgent(LangGraphAgent):
                 message_event = event
                 message = message_event[0]
 
+                # Metadata check for filtering
+                node_name = ""
+                if isinstance(message_event, tuple) and len(message_event) > 1:
+                    metadata = message_event[1]
+                    node_name = metadata.get("langgraph_node", "")
+
+                # STRICT FILTERING:
+                # Only "respond" node uses LLM to generate user-facing text directly.
+                # All other nodes use LLM for internal logic (JSON extraction, routing)
+                # and return manually constructed messages in 'updates'.
+                # We block their LLM stream to prevent leaking JSON/prefixes.
+                if node_name != "respond":
+                    continue
+
                 if isinstance(message, ToolMessage):
                     # Handle ToolMessage (Original Logic)
                     yield (
@@ -565,6 +578,51 @@ class MyAgent(LangGraphAgent):
                 # Basic metrics accumulation from updates
                 current_node = next(iter(update_event))
                 node_data = update_event[current_node]
+
+                # Check for manually constructed messages to yield
+                # (For nodes that were blocked in 'messages' stream)
+                if current_node != "respond" and "messages" in node_data:
+                    msgs = node_data["messages"]
+                    if msgs and isinstance(msgs, list):
+                        last_msg = msgs[-1]
+                        if (
+                            isinstance(last_msg, (AIMessage, AIMessageChunk))
+                            and last_msg.content
+                        ):
+                            # Verify this is new content we haven't yielded
+                            if last_msg.id != current_message_id:
+                                # Close previous if exists
+                                if current_message_id:
+                                    yield (
+                                        TextMessageEndEvent(
+                                            type=EventType.TEXT_MESSAGE_END,
+                                            message_id=current_message_id,
+                                        ),
+                                        None,
+                                        usage_metrics,
+                                    )
+
+                                # Send the full message as one chunk
+                                yield (
+                                    TextMessageStartEvent(
+                                        type=EventType.TEXT_MESSAGE_START,
+                                        message_id=last_msg.id,
+                                        role="assistant",
+                                    ),
+                                    None,
+                                    usage_metrics,
+                                )
+                                yield (
+                                    TextMessageContentEvent(
+                                        type=EventType.TEXT_MESSAGE_CONTENT,
+                                        message_id=last_msg.id,
+                                        delta=last_msg.content,
+                                    ),
+                                    None,
+                                    usage_metrics,
+                                )
+                                current_message_id = last_msg.id
+
                 current_usage = node_data.get("usage", {}) if node_data else {}
                 if current_usage:
                     usage_metrics["total_tokens"] += current_usage.get(
@@ -576,6 +634,14 @@ class MyAgent(LangGraphAgent):
                     usage_metrics["completion_tokens"] += current_usage.get(
                         "completion_tokens", 0
                     )
+
+                # Ensure we don't close current_message_id here prematurely if it matches?
+                # Actually, if we just yielded it from update, we can keep it open or close it.
+                # Standard practice: Close it when switching nodes or ending.
+                # But 'update' comes after 'messages'.
+                # For 'respond', message is yielded via 'messages' mode.
+                # For others, yielded here.
+                # We can close it at the very end of loop or next start.
 
                 if current_message_id:
                     yield (
