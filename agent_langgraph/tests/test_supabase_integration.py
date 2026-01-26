@@ -1,7 +1,7 @@
 import unittest
-import os
 import uuid
-from tools.supabase_client import submit_application, get_supabase_client
+
+from tools.supabase_client import get_supabase_client, submit_application
 
 
 class TestSupabaseIntegration(unittest.TestCase):
@@ -39,8 +39,13 @@ class TestSupabaseIntegration(unittest.TestCase):
 
         try:
             # 1. Insert
-            app_id = submit_application(
-                session_id, user_profile, vehicle_details, selected_quote
+            app_id = submit_application.invoke(
+                {
+                    "session_id": session_id,
+                    "user_profile": user_profile,
+                    "vehicle_details": vehicle_details,
+                    "selected_quote": selected_quote,
+                }
             )
             print(f"✅ Successfully inserted application. ID: {app_id}")
             self.assertIsNotNone(app_id)

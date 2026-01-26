@@ -1,9 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock
-from tools.supabase_client import submit_application
-
+from unittest.mock import MagicMock, patch
 
 import tools.supabase_client
+from tools.supabase_client import submit_application
 
 
 class TestSupabaseClient(unittest.TestCase):
@@ -57,8 +56,14 @@ class TestSupabaseClient(unittest.TestCase):
         }
 
         # Execute
-        result_id = submit_application(
-            session_id, user_profile, vehicle_details, selected_quote
+        # Execute
+        result_id = submit_application.invoke(
+            {
+                "session_id": session_id,
+                "user_profile": user_profile,
+                "vehicle_details": vehicle_details,
+                "selected_quote": selected_quote,
+            }
         )
 
         # Verify
@@ -106,6 +111,13 @@ class TestSupabaseClient(unittest.TestCase):
 
         # Execute & Expect Error
         with self.assertRaises(Exception) as context:
-            submit_application("sess_001", {}, {}, {})
+            submit_application.invoke(
+                {
+                    "session_id": "sess_001",
+                    "user_profile": {},
+                    "vehicle_details": {},
+                    "selected_quote": {},
+                }
+            )
 
         self.assertTrue("No data returned" in str(context.exception))
