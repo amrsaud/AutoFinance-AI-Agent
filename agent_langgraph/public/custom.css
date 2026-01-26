@@ -1,0 +1,26 @@
+/* AutoFinance AI Agent Custom CSS */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    --font-family: 'Inter', sans-serif;
+}
+
+body {
+    font-family: var(--font-family) !important;
+}
+
+/* Make chat bubbles consistently rounded */
+.message-content {
+    border-radius: 12px !important;
+}
+
+/* Add a subtle highlight to the header */
+header {
+    border-bottom: 2px solid #0056b3 !important; /* Royal Blue */
+}
+
+/* Style the Welcome Screen headers */
+.markdown-body h1 {
+    color: #004a99;
+}
