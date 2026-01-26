@@ -78,6 +78,11 @@ async def route_intent(state: dict, llm) -> str:
         # 1. Global Exits
         if "reset" in intent:
             return "reset"
+
+        # 0. Check for Submission Intent (High Priority State)
+        if state.get("awaiting_submission"):
+            return "submission"
+
         if "search" in intent:
             # If user wants to search again, allow it (clears selection in search_param/market_search implicit?)
             # Ideally search_param should clear old selection.

@@ -47,6 +47,12 @@ async def reset_state(state: dict) -> dict:
             "search_params": None,
             "search_results": [],
             "search_confirmed": False,
+            "selected_vehicle": None,
+            "user_profile": None,
+            "eligible_policies": None,
+            "generated_quotes": None,
+            "awaiting_submission": False,
+            "_next_node": None,
             "messages": [
                 AIMessage(
                     content="I've cleared everything and we're starting fresh! 🔄\n\n"

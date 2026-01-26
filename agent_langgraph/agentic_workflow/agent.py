@@ -39,6 +39,7 @@ from nodes import (
     search_market,
     selection_node,
     should_execute_search,
+    submission_node,
 )
 
 config = Config()
@@ -110,6 +111,7 @@ class MyAgent(LangGraphAgent):
         workflow.add_node("selection", self._selection_node)
         workflow.add_node("profiling", self._profiling_node)
         workflow.add_node("financing", self._financing_node)
+        workflow.add_node("submission", self._submission_node)  # Lead Capture
         workflow.add_node("respond", self._respond)
         workflow.add_node("reset", self._reset_state)
 
@@ -127,6 +129,7 @@ class MyAgent(LangGraphAgent):
                 "profiling": "profiling",  # Fallback if manually routed
                 "selection": "selection",  # Explicit selection intent
                 "financing": "financing",
+                "submission": "submission",  # Lead Capture
                 "respond": "respond",
                 "reset": "reset",
             },
@@ -169,6 +172,7 @@ class MyAgent(LangGraphAgent):
         )
 
         workflow.add_edge("financing", END)
+        workflow.add_edge("submission", END)
         workflow.add_edge("respond", END)
         workflow.add_edge("reset", END)
 
@@ -273,6 +277,11 @@ class MyAgent(LangGraphAgent):
         """Execute financing logic."""
         llm = self.llm()
         return await financing_node(state, llm)
+
+    async def _submission_node(self, state: AgentState) -> dict:
+        """Execute submission logic."""
+        llm = self.llm()
+        return await submission_node(state, llm)
 
     def _check_profile_complete(self, state: AgentState) -> str:
         """Check if user profile is complete to proceed to financing."""

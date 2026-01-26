@@ -144,6 +144,9 @@ class AgentState(MessagesState):
     user_profile: UserProfile | None = None
     eligible_policies: list[CreditPolicy] | None = None
     generated_quotes: list[LoanQuote] | None = None
+    awaiting_submission: bool = (
+        False  # Flag to indicate financing quotes were presented
+    )
 
     # Internal
     _next_node: str | None = None  # Router's routing decision
@@ -164,5 +167,6 @@ class AgentState(MessagesState):
             "user_profile": None,
             "eligible_policies": None,
             "generated_quotes": None,
+            "awaiting_submission": False,
             "_next_node": None,
         }
