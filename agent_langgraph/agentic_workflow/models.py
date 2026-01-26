@@ -17,6 +17,7 @@ Defines Vehicle, SearchParams, and AgentState for market discovery.
 """
 
 from enum import Enum
+
 from langgraph.graph import MessagesState
 from pydantic import BaseModel, Field
 

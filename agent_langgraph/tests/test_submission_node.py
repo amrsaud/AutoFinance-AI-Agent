@@ -1,7 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock, AsyncMock
-from langchain_core.messages import HumanMessage, AIMessage
-from models import UserProfile, Vehicle, LoanQuote, EmploymentType
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from langchain_core.messages import HumanMessage
+from models import EmploymentType, LoanQuote, UserProfile, Vehicle
 from nodes.submission import submission_node
 
 
@@ -140,4 +141,5 @@ class TestSubmissionNode(unittest.IsolatedAsyncioTestCase):
 
         # Verify
         mock_submit.invoke.assert_not_called()
-        self.assertTrue("not sure" in result["messages"][0].content.lower())
+        mock_submit.invoke.assert_not_called()
+        self.assertTrue("start over" in result["messages"][0].content.lower())
