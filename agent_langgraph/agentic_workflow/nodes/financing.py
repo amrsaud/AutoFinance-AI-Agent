@@ -196,5 +196,6 @@ async def financing_node(state: dict, llm) -> dict:
         return {
             "eligible_policies": policy_objects,
             "generated_quotes": quote_objects,
+            "awaiting_submission": True if policy_objects and quote_objects else False,
             "messages": [response_msg],
         }

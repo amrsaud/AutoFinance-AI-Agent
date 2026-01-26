@@ -55,6 +55,10 @@ class Config(DataRobotAppFrameworkBaseSettings):
         default=None, validation_alias="DATAROBOT_VECTOR_DB_ID"
     )
 
+    # Supabase Credentials (for Lead Capture)
+    supabase_url: str | None = Field(default=None, validation_alias="SUPABASE_URL")
+    supabase_key: str | None = Field(default=None, validation_alias="SUPABASE_KEY")
+
     @property
     def local_dev_port(self) -> int:
         parsed_url = urlparse(self.agent_endpoint)
